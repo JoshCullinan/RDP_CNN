@@ -1,2 +1,16 @@
 dataRaw.zip
 dataRaw/
+.venv
+.claude
+
+# Session artifacts
+exec_log.txt
+run_log.txt
+
+# Trained-model checkpoints — large + reproducible by re-running the notebook.
+# If you want to ship a model snapshot to another machine, copy models_test/
+# manually (or zip it). Tracked separately from source control.
+models_test/
+
+# Diagnostic figures — regenerate from the notebook / chart_eval.py.
+figures/
