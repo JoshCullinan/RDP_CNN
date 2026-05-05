@@ -189,7 +189,60 @@ These are *load-bearing* lessons distilled from the experiment log. Read in full
 - **Even XML-5 held out, val ≠ test.** UnseenTestSet F1 is roughly half of XML-5 val F1. There's a second layer of distribution shift between XML-5 and UnseenTestSet. Worth probing with explicit feature comparisons (mean(y), actual_len histograms) before assuming any single intervention will close it.
 - **Train-val gap is a leading indicator of capacity vs. signal quality.** When the gap is wide (>0.05), more capacity won't help — find better features or stronger regularisation. When the gap closes, you've earned the right to scale up.
 
-## 11. Current state (end of previous session)
+## 11. CRITICAL FINDING (end of 2026-05-05 session, after runs #17–#23)
+
+**The val/test gap is a TRUNCATION BUG, not a generalization issue.**
+
+After 7 consecutive REVERTED runs failed to move test F1 past run #16's 0.172, an advisor-prompted measurement of val vs test distributions revealed:
+
+- `actual_len` mean: **val 10,788 vs test 30,009** (test is ~3× longer)
+- `bp_end >= MAX_SEQ_LEN(10000)` rate: **val 32.7% vs test 74.4%**
+- `bp_start >= 10000`: **val 0.6% vs test 48.8%**
+- bps within 50bp of edge: **val ~30% vs test ~80%**
+
+**Test sequences are ~3× longer than train/val.** `MAX_SEQ_LEN=10000` truncates the test set, throwing away most breakpoints. Half of test `bp_start` values and three-quarters of test `bp_end` values are positions the model literally never sees. Of the visible bps, 80% are squashed against an edge.
+
+**Every prior REVERTED run is re-explained by this:**
+- Stable test F1 ≈ 0.12–0.17 across all variants → consistent truncation rate
+- Run #21 boundary suppression crashed test F1 to 0.024 → it banned the only positions truncated test bps appear at
+- Bigger kernels (#22) helped val (which fits) but not test (which doesn't)
+- Top-K mode-collapse to 0/9999 (#19/#20) → that "boundary attractor" was the truncated test distribution
+
+**Fix for run #24 (one-line change in cell-3):** `MAX_SEQ_LEN = 10000 → 32000`. Max observed `bp_end` in test is 30,143; 32000 captures everything with margin.
+
+**Required paired infra changes:**
+- Cache invalidates (key includes MAX_SEQ_LEN) — cold cache run, ~10-15 min for re-parse
+- VRAM: RTX 3070 has 8GB; preemptive `BATCH_SIZE 8 → 2 or 4` (per-sample input alone is ~22MB; with activations × 6 dilated blocks × 64 filters, batch 8 is at risk of OOM at 32k length)
+- POS_WEIGHT may need rescaling: longer sequences → lower mean(y), implied POS_WEIGHT roughly triples (current 70 → ~178 by run-#8 calibration). Treat as paired infrastructure with the MAX_SEQ_LEN bump.
+
+**Sanity check before run #24:** verify SANTA simulator outputs are 30k-bp sequences (not alignments with gaps making encoded length shorter). If alignments include internal gaps, the truncation arithmetic might differ.
+
+If run #24 lifts test F1 toward val's 0.28-0.31, the project's "structural val/test gap" narrative is rewritten. Best result so far is run #16: test F1 = 0.172; under the truncation hypothesis, the achievable ceiling on UnseenTestSet should be much higher.
+
+---
+
+## 11a. Current state (end of 2026-05-05 session — runs #17–#23)
+
+**Status:** HANDOVER §7 stop condition fired (5 consecutive REVERTED). Loop paused. Runs #17–#22 produced no headline win but two structured findings worth carrying forward:
+
+1. **Top-K axis explored and closed.** Runs #19–#21 ruled out softmax-over-positions outputs with the current backbone. The BN+'same'-padding boundary spike (harmless under per-position sigmoid) catastrophically wrecks argmax — model collapses to predicting positions 0 and 9999. The fix (boundary-mask trick) breaks mode-collapse but reveals the backbone can't do interior localization to argmax precision. K_TOPK / TOPK_TARGET_SIGMA / EDGE_BUFFER constants and `build_cnn_topk` / `topk_xent_loss` / `make_topk_targets` are preserved for future revisits. **Necessary infrastructure for any argmax-style head is documented in CLAUDE.md "Three things easy to break" (now five).**
+
+2. **Cross-config generalization is the per-position bottleneck.** Three different attacks (#17 wider MaxChi, #18 σ-paired POS_WEIGHT, #22 bigger kernels) all showed: val improves, test doesn't transfer or gets worse. The model has enough capacity; it lacks the right *invariance / inductive bias* for XML-1..4 → UnseenTestSet. Feature/regularization changes at the local axis don't help.
+
+**Pipeline infra built:**
+- Disk cache for `load_dataset` (per-directory, keyed on MAX_SEQ_LEN / MAXCHI_WINDOWS / LABEL_SIGMA / BP_WINDOW) — cuts subsequent same-config wall time by ~50% (158 MB warm cache for default config + UnseenTestSet).
+- `tf.data.Dataset` with prefetch in cell-22.
+- GPU memory_growth enabled in cell-1 (RTX 3070 8GB compatible).
+- BATCH_SIZE 16 → 8 (forced by 8GB VRAM vs M4's 16GB unified).
+- All cell IDs preserved.
+
+**Best result still run #16:** test F1 = 0.172, Both BPs 3.7%. Cached models for runs #17-#22 in `models_test_backup/cnn_breakpoint_best.run{17..22}.keras`.
+
+**Recommended #23:** parent-swap augmentation. Channel order for parent 1 vs parent 2 is arbitrary — directly attacks invariance/generalization. Implementation: per-batch swap channels `[5:10] ↔ [10:15]`, `[15] ↔ [16]`, AND flip sign of MaxChi channels (since they use `match_p1 - match_p2`). Targets unchanged.
+
+---
+
+## 11b. Current state (end of previous session)
 
 **Best configuration so far** (run #16):
 - MAX_SEQ_LEN = 10000

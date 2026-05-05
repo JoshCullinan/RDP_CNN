@@ -1,5 +1,6 @@
 dataRaw.zip
 dataRaw/
+/dataRaw
 .venv
 .claude
 
@@ -11,6 +12,10 @@ run_log.txt
 # If you want to ship a model snapshot to another machine, copy models_test/
 # manually (or zip it). Tracked separately from source control.
 models_test/
+models_test_backup/
+
+# load_dataset disk cache — regenerable from dataRaw/ via the notebook.
+cache/
 
 # Diagnostic figures — regenerate from the notebook / chart_eval.py.
 figures/

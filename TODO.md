@@ -148,40 +148,74 @@ Two reframings are still pending and shape what's worth trying:
 
 ## High priority (likely to move the needle)
 
-### 1. Run #17: extended MaxChi windows {50, 100, 200, 500, 1000, 2000} — STAGED
+### 1. ~~Run #17: extended MaxChi windows {50, 100, 200, 500, 1000, 2000}~~ — REVERTED
 
-cell-3 has been edited to add windows 1000 and 2000 (N_INPUT_CHANNELS
-22 → 24). The notebook on disk has the cell-3 source updated but the
-cached cell outputs are still from run #16 (4 windows). Run was started
-on the previous machine but killed before any epoch completed (~50 min
-data-prep dominated wall time). **The next agent should run this first.**
+Ran on 2026-05-04. Val improved trivially (+0.004 F1, +2.3pp Both BPs),
+but Test F1 dropped 0.172 → 0.161 and Test Both BPs stayed at 3.7%.
+Train-val gap widened slightly (+0.037 → +0.043). cell-3 reverted to
+4 windows. See Experiment Log #17. The val/test structural gap is the
+real bottleneck — adding more parental-disparity channels does not
+attack it.
 
-Hypothesis: XML-5 val and the test set are entirely ≥4kb sequences;
-wider windows give the model the longer-range parental-disparity signal
-that 50–500 bp can't capture. Single change idea (extend MAXCHI_WINDOWS
-in cell-3, cell-6's `_maxchi_features` is data-driven and will adapt).
+**Hardware note:** Migration to Linux/RTX 3070 (8 GB VRAM) was completed
+in run #17. `BATCH_SIZE` dropped 16 → 8 to fit VRAM; runtime ~19 min
+end-to-end (vs 80–100 min on M4).
 
-Watch for:
-- Val Both BPs recovers from #16's 8.5% (maybe back to ~15-20%).
-- Test F1 holds or improves from #16's 0.172.
-- Train-val gap stays ≤ +0.05 (the wider windows shouldn't reintroduce overfitting).
+### 2. ~~σ tuning, paired with POS_WEIGHT scaling~~ — REVERTED (run #18)
 
-### 2. σ tuning, paired with POS_WEIGHT scaling
+Tested σ=10 + POS_WEIGHT=140 (data-implied was 155.77) on 2026-05-04.
+Test F1 0.172 → 0.160, Both BPs flat at 3.7%, train PR-AUC dropped
+0.176 → 0.117 (under-fitting). Closes the σ/POS_WEIGHT coupling
+story — neither σ=10 alone (run #9) nor σ=10 paired with POS_WEIGHT
+helps. cell-3 reverted to LABEL_SIGMA=20 and cell-12 to POS_WEIGHT=70.
+**Don't revisit σ tuning unless the underlying loss formulation changes.**
 
-Re-attempt #9. For σ=10, set POS_WEIGHT to ~140 (data-implied was 166
-when last measured). Treat σ + POS_WEIGHT as one logical unit per
-HANDOVER §4. Sharper targets should encourage more localized peaks.
+### 3. ~~Top-K coordinate regression head~~ — REVERTED (runs #19, #20)
 
-### 3. Top-K coordinate regression head — strategic backstop
+Tested on 2026-05-04 with hard one-hot (#19) and soft Gaussian σ=5 (#20)
+targets — both stalled at val_topk_match_rate=0.32965 (best epoch=1,
+identical to 5 decimal places because of deterministic seeds + same
+gradient direction in epoch 1). Test F1: #19=0.159, #20=0.152; Both BPs:
+0% on both. The optimization landscape of softmax over 10000 positions
+with this backbone has very weak signal beyond an early-epoch attractor.
+**Target sharpness is not the bottleneck; the head/backbone combination
+is.** Top-K axis is exhausted with the current backbone. See Experiment
+Log entries #19 and #20.
 
-If wider MaxChi (#17) and σ-tuning (#2) plateau, this is the principled
-attack on the val/test distribution gap. Replace per-position binary
-classification with a structured K=2 (position, confidence) output;
-sorted-pair L1 loss. Major refactor (touches output head, loss, eval),
-but addresses class imbalance fundamentally and removes the boundary
-artefact entirely. Discussed with the advisor multiple times in the
-previous session; the consensus was "do this when input-feature
-engineering plateaus", which is approximately now.
+### 3b. ~~Top-K boundary-attractor fix~~ — REVERTED (run #21)
+
+Three-piece fix (target clamp, edge-buffer logit suppression). Mode
+collapse broken (training ran 41 epochs, best epoch=26), but test F1
+crashed to 0.024 — the previous 0.16 was almost entirely the boundary
+attractor by chance matching test bps. With boundaries banned, the
+backbone can't localize. **Top-K axis CLOSED with this backbone.**
+
+### 4. NEXT (run #24): MAX_SEQ_LEN 10000 → 32000 — fixes the truncation bug
+
+Diagnostic on 2026-05-05 (after 7 consecutive REVERTED runs) revealed
+test sequences are ~3× longer than train/val (mean 30,009 vs 10,788).
+Current MAX_SEQ_LEN=10000 truncates them — 48.8% of test `bp_start`
+and 74.4% of test `bp_end` are at positions the model never sees.
+This explains why test F1 has been stuck at ~0.12-0.17 across every
+variant: the upper bound was set by truncation, not by model quality.
+
+**One-line fix:** `MAX_SEQ_LEN = 10000` → `32000` in cell-3.
+
+**Paired infra (forced, not research):**
+- Cache invalidates → cold-cache run (~10-15 min for re-parse).
+- BATCH_SIZE 8 → 2 or 4 (8GB VRAM constraint at 3.2× length).
+- POS_WEIGHT 70 → ~178 (mean(y) drops ~3×; apply run-#8 0.847× factor to data-implied).
+
+See HANDOVER §11 for full details and sanity-check items.
+
+### 5. Masked BatchNorm under per-position (deferred)
+
+Direct empirical motivation from runs #19-#21: BN+'same'-padding
+boundary spike is now confirmed to dominate any argmax-style prediction.
+A custom Keras layer that computes BN stats only over valid (non-padded)
+positions would eliminate the artifact at the architectural level. Apply
+under the per-position #16 baseline pipeline. Single change. Custom
+layer work is the only complexity. Advisor consultation for design first.
 
 ### 4. Masked BatchNorm
 
