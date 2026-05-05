@@ -19,3 +19,7 @@ cache/
 
 # Diagnostic figures — regenerate from the notebook / chart_eval.py.
 figures/
+
+#.tar files
+models_test.tar
+model_backup.tar
