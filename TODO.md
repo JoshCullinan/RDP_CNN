@@ -190,23 +190,104 @@ crashed to 0.024 — the previous 0.16 was almost entirely the boundary
 attractor by chance matching test bps. With boundaries banned, the
 backbone can't localize. **Top-K axis CLOSED with this backbone.**
 
-### 4. NEXT (run #24): MAX_SEQ_LEN 10000 → 32000 — fixes the truncation bug
+### 4. ~~Run #24: MAX_SEQ_LEN 10000 → 32000~~ — KEPT (partial)
 
-Diagnostic on 2026-05-05 (after 7 consecutive REVERTED runs) revealed
-test sequences are ~3× longer than train/val (mean 30,009 vs 10,788).
-Current MAX_SEQ_LEN=10000 truncates them — 48.8% of test `bp_start`
-and 74.4% of test `bp_end` are at positions the model never sees.
-This explains why test F1 has been stuck at ~0.12-0.17 across every
-variant: the upper bound was set by truncation, not by model quality.
+Ran on 2026-05-05. Test F1 0.172 → **0.191** (+0.019, in [0.18, 0.25]
+band → KEPT but partial). Val F1 0.282 → 0.348 (+0.066), Val Both BPs
+8.5% → 14.7% (+6.2pp), Test Both BPs 3.7% → 6.1% (+2.4pp).
 
-**One-line fix:** `MAX_SEQ_LEN = 10000` → `32000` in cell-3.
+**Truncation hypothesis is real but not the whole story.** Test
+sequences are now fully visible to the model (the 74.4% of `bp_end`
+values that didn't exist in the encoded input now do), and gains
+materialised — but cross-config generalization gap is *narrowed*, not
+*closed*. Val/test F1 spread is still 0.157 (was 0.110 in #16).
 
-**Paired infra (forced, not research):**
-- Cache invalidates → cold-cache run (~10-15 min for re-parse).
-- BATCH_SIZE 8 → 2 or 4 (8GB VRAM constraint at 3.2× length).
-- POS_WEIGHT 70 → ~178 (mean(y) drops ~3×; apply run-#8 0.847× factor to data-implied).
+**Discovery during the run:** the diagnostic's anticipated POS_WEIGHT
+rescale (70 → 178, predicting mean(y) would drop ~3×) was wrong.
+mean(y) over UNMASKED positions stayed at 0.0125 (data-implied
+POS_WEIGHT = 79, basically unchanged). The mask discards padding so
+the per-non-padded-position positive rate is invariant to MAX_SEQ_LEN.
+Hardcoded POS_WEIGHT=178 over-weighted positives by ~2.25×, and
+showed it: best epoch=3 (very early plateau), train PR-AUC barely
+climbed +0.019 over 18 epochs, best threshold dropped 0.7 → 0.4.
 
-See HANDOVER §11 for full details and sanity-check items.
+**Forced infra changes that DID work** (kept for future MAX_SEQ_LEN
+=32k runs):
+- BATCH_SIZE 8 → 2 (RTX 3070 8 GB VRAM at 3.2× length).
+- max_files=500 cap on each train dir (15 GB WSL2 VM panicked on
+  full-set `np.concatenate` at 32 k length).
+- cell-22 `from_tensor_slices` pinned to `tf.device('/CPU:0')`
+  (otherwise OOMs the 5.5 GB free VRAM).
+- cell-22 `del X_train, y_train, w_train` after dataset construction
+  (`from_tensor_slices` materialises a tf.constant copy alongside the
+  resident numpy; without del, peak ~14 GB CPU pushed the 15 GB WSL2
+  VM into vmmem balloon territory and caused catastrophic VM-kill on
+  three earlier #24 attempts).
+- `~/.wslconfig` → WSL2 RAM cap 15 GB → 24 GB (host has 32 GB).
+- `dataRaw/` moved off OneDrive `/mnt/c/...` symlink chain onto Linux
+  ext4 (was the root cause of the catastrophic vmmem-kill crashes).
+
+See Experiment Log #24 for full results and lessons.
+
+### 5. (DONE) RUN #28 LANDED 2026-05-06: parser + fp16 + from_generator + cgroup
+
+**Outcome:** Test F1 = 0.239 (val-thresh) / 0.308 (test-best). Val F1 = 0.575. Above prior CNN best (~0.218) but below RDP5 (0.367). All 6 infrastructure fixes KEPT — see HANDOVER.md §11-current and Experiment Log #28 for the full list.
+
+**Key learning that reshapes the queue below:** the val→test gap is now **calibration drift**, not capacity. Same model gets 62.9% Both-BPs on val and 19.5% on test at the same threshold; test wants threshold 0.9 vs val 0.6. Model logits are systematically smaller-magnitude on test — driven by longer sequences and different MaxChi disparity scale. Prior items in the queue were chosen against the buggy parser; many are now stale.
+
+### 5b. NEXT (run #29) — Per-sample feature normalization on MaxChi channels
+
+**Hypothesis:** The MaxChi disparity channels (18-21) have different value ranges between train (XML-1..4) and test (UnseenTestSet) because the simulator settings produce sequences of different lengths and substitution rates. The model learns logit calibration against train-statistics; at test time the same parental-disparity signal lands in a different channel-value range and pushes through the network differently. Per-sample standardization (subtract sample mean, divide by sample std on each MaxChi window channel, masked to non-padded positions) makes the disparity statistic comparable across train/test.
+
+**Change:** cell-6 `_maxchi_features` returns standardized output. Single function modification, no other cells touched.
+
+**Expected:**
+- Cache invalidates (MAXCHI windows are part of cache key only by tuple value, not statistic; we'd want to bump CACHE_VERSION to force regen).
+- If hypothesis correct: val→test threshold gap narrows (0.6 vs 0.9 → both within 0.1 of each other), test F1 at val-thresh climbs.
+- Risk: we lose information about the *absolute* disparity magnitude. If that matters, val numbers regress.
+
+**Verdict criteria:**
+- Test F1 ≥ 0.367 (above RDP5) → KEPT, primary goal achieved.
+- Test F1 ∈ [0.30, 0.367] → KEPT, partial — calibration was a real factor but not the whole story.
+- Test F1 < 0.27 → REVERTED, calibration wasn't the limiter; pivot to U-Net or Transformer.
+
+**Wall time:** ~30 min training + 3 min eval (test cache exists).
+
+### 5c. AFTER #29: U-Net or Transformer encoder
+
+If #29 doesn't get us to 0.30 test F1, the architecture has to change. Two candidates ranked by expected impact:
+
+- **U-Net** (encoder-decoder with skip connections). Naturally per-position output. Skip connections preserve fine-grained location info that the dilated stack loses. Estimated 1-2M params, single-day implementation.
+- **Transformer encoder** over positions (e.g. 6-8 layers, 8 heads, 256 model dim). Attention is intrinsically calibrated to relative position, less sensitive to absolute length. Would be 3-5M params. More implementation work; warrants a clean phase plan.
+
+User has waived the CNN-only constraint explicitly. Pick whichever attacks the failure mode best. If #29 reveals "calibration was 80% of the gap," go U-Net (better local feature extraction). If "calibration was 20% of the gap," go Transformer (better long-range and length-invariant).
+
+---
+
+### 5-prev. (DONE) run #25: POS_WEIGHT 178 → 70 — correct the over-weight
+
+The over-weighting was a paired-infra mistake from #24, not a research
+choice. Drop POS_WEIGHT back to ~70 (matching the data-implied 79 ×
+0.847 factor from run #8 — same rule, applied to the actual data-
+implied at MAX_SEQ_LEN=32 k, not the predicted one).
+
+**One-line change:** cell-12 `POS_WEIGHT = 178.0` → `70.0` (and matching
+doc comment in cell-3).
+
+**Expected if POS_WEIGHT was the over-weight culprit:**
+- Best epoch later (5–10, not 3).
+- Train PR-AUC climbs further (was capped at 0.166).
+- Val/test F1 rebalance: precision recovers, recall comes down some,
+  best threshold rises back toward 0.5–0.7.
+- If test F1 jumps materially (≥ 0.22, say), the cross-distribution
+  gap is much smaller than #24 suggested.
+- If test F1 stays flat (~0.19), then POS_WEIGHT wasn't the limiter
+  and the residual gap is a true generalization issue → next axes
+  are augmentation (parent-swap, reverse-complement) or backbone
+  capacity (n_filters 64 → 128).
+
+Cache stays warm (no MAX_SEQ_LEN/MAXCHI/SIGMA/BP_WINDOW change).
+Wall time ~15 min total like #24.
 
 ### 5. Masked BatchNorm under per-position (deferred)
 

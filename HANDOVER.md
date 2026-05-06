@@ -221,24 +221,119 @@ If run #24 lifts test F1 toward val's 0.28-0.31, the project's "structural val/t
 
 ---
 
-## 11a. Current state (end of 2026-05-05 session — runs #17–#23)
+## 11-current. Current state (end of 2026-05-06 session — run #28 LANDED)
 
-**Status:** HANDOVER §7 stop condition fired (5 consecutive REVERTED). Loop paused. Runs #17–#22 produced no headline win but two structured findings worth carrying forward:
+**Status:** Run #28 KEPT. Test F1 = **0.239** (val-thresh) / **0.308** (test-best). Val F1 = **0.575**. Still below RDP5 (0.367) but above prior CNN best (~0.218). Most importantly: **infrastructure is stable now.**
 
-1. **Top-K axis explored and closed.** Runs #19–#21 ruled out softmax-over-positions outputs with the current backbone. The BN+'same'-padding boundary spike (harmless under per-position sigmoid) catastrophically wrecks argmax — model collapses to predicting positions 0 and 9999. The fix (boundary-mask trick) breaks mode-collapse but reveals the backbone can't do interior localization to argmax precision. K_TOPK / TOPK_TARGET_SIGMA / EDGE_BUFFER constants and `build_cnn_topk` / `topk_xent_loss` / `make_topk_targets` are preserved for future revisits. **Necessary infrastructure for any argmax-style head is documented in CLAUDE.md "Three things easy to break" (now five).**
+### What this session delivered
 
-2. **Cross-config generalization is the per-position bottleneck.** Three different attacks (#17 wider MaxChi, #18 σ-paired POS_WEIGHT, #22 bigger kernels) all showed: val improves, test doesn't transfer or gets worse. The model has enough capacity; it lacks the right *invariance / inductive bias* for XML-1..4 → UnseenTestSet. Feature/regularization changes at the local axis don't help.
+1. **Parser fix** (`pd.read_csv(..., index_col=False)` on both stats CSVs) — was silently giving the model garbage parent IDs across every prior run. Fixed in cell-10. Effect: dataset sizes jumped ~67× (UnseenTestSet went from 82 to **5,539 events**) and the comparison set is now apples-to-apples with RDP5.
+
+2. **fp16 X storage** (cell-11) — X arrays stored as float16, cast back to fp32 inside the tf.data .map after batching. Halves host RAM. One-hot/match channels are exact in fp16; MaxChi disparity has ~3e-3 precision in [-1, 1] which is fine.
+
+3. **`from_generator` instead of `from_tensor_slices`** (cells 22, 26, 40) — the *real* root cause of the catastrophic Vmmem deaths. `from_tensor_slices(X)` materialises a tf.constant of size(X), so X_val numpy + X_val tf.constant = 2× resident. Watched a single 8 GB Committed_AS jump at end-of-epoch-1 in monitoring CSV — exactly the X_val (4.12 GB fp16) duplicating into a tf.constant. Switched to `from_generator` which yields slices on demand. No graph copy, no doubling.
+
+4. **cgroup memory cap** — `systemd-run --user --scope -p MemoryMax=24G` wraps the python launch. Replaces the prior catastrophic Vmmem deaths with surgical Linux OOM-kills inside the scope only — Vmmem stays alive, we get a clean Python termination + monitorable scope-failed event. Confirmed working: run #28d hit the cap during the buggy old eval cell, scope killed, WSL stayed up.
+
+5. **Persistent monitoring** in `monitor/wsl_log.sh` (Linux side) and `C:\Users\joshc\wsl_monitor\win_log.ps1` (Windows side, run from PowerShell). Both write CSVs to `/mnt/c/Users/joshc/wsl_monitor/` every 3s. The Windows side is the only vantage point that survives a full Vmmem death. Diagnosed the 14:56:28 swap-thrash → kernel deadlock chain in run #28 attempt-1; confirmed run #28d's cgroup OOM was *not* a Vmmem death.
+
+6. **UnseenTestSet now CACHED** — `cache_test_set.py` exec's the canonical notebook parser to populate `cache/ds_UnseenTestSet_*.npz/.pkl`. Future evals on a saved model are ~3 min from disk via `eval_only.py`, no retrain. Use this when iterating on threshold sweeps or post-hoc diagnostics.
+
+### Run #28 results vs RDP5
+
+| | Val (XML-5, 2925 events) | Test (UnseenTestSet, 5539 events) |
+|---|---|---|
+| Best F1 (raw) | 0.575 @ thr=0.6 | **0.308 @ thr=0.9** |
+| Val-thresh F1 (raw) | 0.575 @ 0.6 | 0.239 @ 0.6 |
+| Both BPs (raw) | 62.9% @ 0.6 | 19.5% @ 0.6 |
+| **HONEST F1 (edge-suppress EB=200)** | — | **0.169–0.171** |
+| RDP5 | — | F1=0.367, Both BPs 15.3% |
+
+**CRITICAL — read this before claiming run #28d "beat" anything.** A bucket-by-position diagnostic (`bucket_diagnostic.py`) showed that **the model exploits a BN+'same'-padding boundary spike**:
+- Detection rate at positions 0-1000 bp: **98.9%**
+- Detection rate at positions 29000-31000 bp (content edge for 30k-test sequences): **88-100%**
+- Detection rate at interior positions 5000-29000 bp: **~25-30%**
+
+Edge-buffer suppression of just the first/last 100 bp of each sample's content during inference (`eval_edge_suppressed.py`) drops test F1 from 0.308 → 0.171. **44% of run #28d's apparent test performance is boundary artifact.**
+
+The model learned to output peaks at content/padding boundaries because (a) some real BPs land there, and (b) BN running stats are contaminated by padded zeros, systematically inflating logits at boundaries. CLAUDE.md §"Three things that are easy to break" #5 flagged this risk under argmax-style heads but it dominates the per-position sigmoid head too — just less visibly.
+
+**Honest interior F1 (0.171) is much further below RDP5 (0.367) than the raw 0.308 suggested.** The val→test gap (0.575 → 0.239 raw) was largely driven by val sequences having content well below the boundary spike zone, while test has many BPs near content edges that the model "detects" via the spike rather than real localization. There is no calibration drift to fix; there's a boundary shortcut to break.
+
+**Diagnostic chain that revealed this:**
+1. `sanity_calibration.py` — showed test predictions are NOT systematically smaller-magnitude (calibration drift hypothesis dead).
+2. `bucket_diagnostic.py` — detection rate by 1000bp bucket; 98.9% at boundary, ~30% interior. Smoking gun.
+3. `eval_edge_suppressed.py` — edge_buffer × threshold sweep; F1 collapse at EB=100 confirmed.
+
+### Saved artifacts (do not delete)
+
+- `models_test/cnn_breakpoint_final.keras` — run #28d trained model. 514k params. **Boundary-shortcut model — useful as a comparison baseline, do not deploy.**
+- `cache/ds_UnseenTestSet_*.npz/.pkl` — canonical-parser test cache. Saves 10 min per eval.
+- `cache/ds_XML-1..5_*.npz/.pkl` — train+val caches.
+- `eval_only.py` — streaming val+test eval via from_generator. Run via `systemd-run --user --scope -p MemoryMax=20G bash -c 'source .venv/bin/activate && python3 eval_only.py'`. **Note: reports raw F1 inflated by boundary shortcut; use eval_edge_suppressed.py for honest numbers.**
+- `eval_edge_suppressed.py` — sweeps edge_buffer × threshold to estimate honest interior F1. Run alongside any inference for a more truthful number.
+- `bucket_diagnostic.py` — per-position-bucket detection rate. Use to detect boundary shortcuts in any future model.
+- `sanity_calibration.py` — val vs test prediction-magnitude comparison.
+- `cache_test_set.py` — exec's notebook parser to populate UnseenTestSet cache.
+- `monitor/wsl_log.sh` + `C:\Users\joshc\wsl_monitor\win_log.ps1` — start before any future training run.
+
+### Operational discipline that prevented this from getting worse
+
+- **Don't run Bash status checks during training danger windows.** Each `bash -c ...` from the agent forks a shell from the 27 GB Python parent — page-table COW costs ~100 MB per fork. Use `tail -f` once or rely on the persistent monitors.
+- **Always wrap training in `systemd-run --user --scope -p MemoryMax=24G`.** This is non-optional now. Replaces Vmmem deaths with clean Python kills.
+- **Validate any new parser implementation against a cached pkl** before trusting downstream numbers. `eval_only.py` had its own `parse_simulation` that produced 2862 test events; the canonical parser produced 5539. The half that was missing came from `set()`-cast scrambling candidate ordering. The cached val pkl is ground truth — diff against it.
+
+### Two bug fixes from this session — historical reference
+
+1. **Parser column-shift bug (cell-10).** `pd.read_csv` was treating each `.faRecombIdentifyStats.csv` row's `Event` column as the row index because of trailing commas in data rows. Result: every column was shifted by one, the parsed `ISeqs` column was actually the float `ListCorr` column, and `parse_simulation` was building triplets with **random integers as parent IDs** — silently feeding garbage to the model on every run before #27. Fix: `index_col=False` on both `read_csv` calls. **Effect:** sim CSVs now yield ~26 events/file (vs ~0.4 before), so dataset sizes jumped ~67×. This invalidated all prior comparisons against the RDP5 classical baseline (5,671 events on UnseenTestSet); the new comparison set has the same denominator.
+
+2. **WSL2 OOM crash from inflated dataset size (cell-11, cell-22, cell-40).** Run #27 hit a balloon-kill / kernel OOM at peak ~28-32 GB resident: X_train 8 GB fp32 + X_val 8.24 GB fp32 + tf.constant doubling under `from_tensor_slices` + `np.concatenate` doubling. WSL was raised to 28 GB but still tight. **Fix in run #28:**
+   - cell-11 (`load_dataset`) casts X to **float16** on read (one-hot 0/1 channels exact in fp16, MaxChi disparity in [-1, 1] keeps ~3e-3 precision).
+   - cell-22 adds `tf.data.Dataset.map(cast x → fp32)` so the model still trains in fp32 (no mixed precision).
+   - cell-22 also `del X_val, y_val, w_val` after val pipeline construction (was only deleting train arrays).
+   - cell-40 (test eval) drops `train_ds`, `val_ds` first, builds a fp16-numpy / fp32-cast tf.data pipeline for `cnn.predict` so X_test (5,539 events × 2.816 MB = 15.6 GB fp32) never materialises as fp32 in host RAM.
+   - Existing fp32 caches still load (cast-on-read path); no re-parse needed.
+   - Net: peak host RAM for run #28 should be ~12-14 GB, well under the 28 GB cap.
+
+**WSL config:** `/mnt/c/Users/joshc/.wslconfig` is now `memory=28GB swap=12GB` (host has 32 GB). User raised it from 24 → 28 GB this session.
+
+**TF stack:** TF 2.18.1 + CUDA on RTX 3070 (5.5 GB GPU). Working — do NOT upgrade. The OOM was a host-RAM budget issue, not a TF bug.
+
+**Best result so far:** run #25 (test F1 = 0.218) on the **buggy parser** — model was trained with garbage parents but somehow eked out a small lift. Once #28 lands, that comparison number is no longer meaningful: the new training distribution has correct triplets, ~67× more events per file, and the test-set denominator changes too.
+
+**RDP5 classical baseline:** F1 = 0.367 on UnseenTestSet (5,671 events from PredBPStart/PredBPEnd in faSimVSRealCompare.csv, ±200 bp tolerance). **This is the bar to beat.**
+
+**Run #28 expectations:**
+- Train events: 2,841 (XML-1..4, max_files=40 each).
+- Val events: 2,925 (XML-5, max_files=200).
+- Test events: 5,539 (UnseenTestSet, all files).
+- If parser fix alone closes the gap to RDP5, run #29+ becomes about exceeding it. If still well below, next moves: bigger backbone, parent-swap aug (now meaningful — before, swap was no-op since parents were garbage), or a different architecture entirely (U-Net, Transformer-encoder per position). User said no CNN-only constraint.
+
+---
+
+## 11a. Current state (end of 2026-05-05 session — runs #17–#24)
+
+**Status:** Run #24 KEPT (partial). 5-REVERTED stop-condition streak reset.
+
+**Headline:** truncation hypothesis from the end-of-2026-05-05 diagnostic is **partially confirmed**. Test F1 lifted **0.172 → 0.191** (+0.019), test Both BPs 3.7% → 6.1%; val gains larger (F1 0.282 → 0.348, Both BPs 8.5% → 14.7%). Test F1 didn't crack the 0.25 line that would have rewritten the whole "0.172 ceiling" narrative — a second factor remains.
+
+**Key learning from #24:** the data-implied POS_WEIGHT did **not** triple as the diagnostic anticipated. mean(y) over unmasked positions was 0.0125 at MAX_SEQ_LEN=32 k vs ~0.014 at 10 k — basically unchanged because the mask discards padding. Hardcoded POS_WEIGHT=178 over-weighted positives by ~2.25× vs the data-implied 79. Symptoms: best epoch=3 (very early plateau), train PR-AUC barely climbed, best threshold dropped 0.7 → 0.4 (predictions systematically inflated). **POS_WEIGHT correction is the obvious next single-axis change.**
+
+**What's still active beyond #24:**
+1. **Top-K axis closed** (runs #19–#21). Boundary-mask infra preserved per CLAUDE.md item #5. Don't revisit without upstream fix to BN+padding spike.
+2. **Cross-config generalization gap narrowed but not closed.** Test F1 still trails val F1 by 0.157 (vs 0.110 in #16). Augmentation at the invariance axis (parent-swap, reverse-complement) and bigger backbone are still on the queue — but only re-attempt after POS_WEIGHT is corrected and we know what the *real* baseline at MAX_SEQ_LEN=32 k looks like.
 
 **Pipeline infra built:**
-- Disk cache for `load_dataset` (per-directory, keyed on MAX_SEQ_LEN / MAXCHI_WINDOWS / LABEL_SIGMA / BP_WINDOW) — cuts subsequent same-config wall time by ~50% (158 MB warm cache for default config + UnseenTestSet).
-- `tf.data.Dataset` with prefetch in cell-22.
-- GPU memory_growth enabled in cell-1 (RTX 3070 8GB compatible).
-- BATCH_SIZE 16 → 8 (forced by 8GB VRAM vs M4's 16GB unified).
+- Disk cache for `load_dataset` (per-directory, keyed on MAX_SEQ_LEN / MAXCHI_WINDOWS / LABEL_SIGMA / BP_WINDOW) — currently warm for MAX_SEQ_LEN=32 k (~130 MB across 5 train dirs + UnseenTestSet).
+- `tf.data.Dataset.from_tensor_slices` pinned to `tf.device('/CPU:0')` in cell-22 to keep bulk arrays off GPU.
+- `del X_train, y_train, w_train` after dataset construction — prevents the numpy+TF doubling that OOM'd the 15 GB WSL VM at MAX_SEQ_LEN=32 k.
+- WSL2 RAM cap raised 15 GB → 24 GB via `~/.wslconfig` (host has 32 GB).
+- `dataRaw/` moved off the OneDrive symlink chain onto Linux ext4 (was the root cause of catastrophic vmmem-kill crashes early in this session).
 - All cell IDs preserved.
 
-**Best result still run #16:** test F1 = 0.172, Both BPs 3.7%. Cached models for runs #17-#22 in `models_test_backup/cnn_breakpoint_best.run{17..22}.keras`.
+**Best result is now run #24:** test F1 = 0.191, val F1 = 0.348, both improvements over #16. Models for runs #17-#24 in `models_test_backup/cnn_breakpoint_best.run{17..24}.keras`.
 
-**Recommended #23:** parent-swap augmentation. Channel order for parent 1 vs parent 2 is arbitrary — directly attacks invariance/generalization. Implementation: per-batch swap channels `[5:10] ↔ [10:15]`, `[15] ↔ [16]`, AND flip sign of MaxChi channels (since they use `match_p1 - match_p2`). Targets unchanged.
+**Recommended #25:** drop POS_WEIGHT 178 → 70. Single-axis change. Same MAX_SEQ_LEN=32k baseline. If POS_WEIGHT was the over-weighting culprit: best epoch should land 5-10 (not 3), train PR-AUC should climb, and val/test F1 should rebalance toward higher precision. If test F1 jumps materially with the corrected POS_WEIGHT, we have a much cleaner read on what's left of the cross-distribution gap.
 
 ---
 
