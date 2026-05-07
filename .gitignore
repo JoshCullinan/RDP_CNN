@@ -27,3 +27,4 @@ figures/
 #.tar files
 models_test.tar
 model_backup.tar
+history_*.json
