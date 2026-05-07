@@ -1,0 +1,67 @@
+2026-05-07 19:24:33.851968: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:477] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+E0000 00:00:1778174673.950670  396378 cuda_dnn.cc:8310] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+E0000 00:00:1778174673.979559  396378 cuda_blas.cc:1418] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-05-07 19:24:34.220210: I tensorflow/core/platform/cpu_feature_guard.cc:210] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+[19:24:39] loading model models_test/cnn_breakpoint_run39_final.keras
+I0000 00:00:1778174680.239725  396378 gpu_device.cc:2022] Created device /job:localhost/replica:0/task:0/device:GPU:0 with 5562 MB memory:  -> device: 0, name: NVIDIA GeForce RTX 3070, pci bus id: 0000:26:00.0, compute capability: 8.6
+  ok. 1,571,137 params, 33 input channels
+  val cache:  cache/ds_XML-5_a4fac05cc0c5b767.npz
+  test cache: cache/ds_UnseenTestSet_2c3af415305177aa.npz
+
+============================================================
+DIAGNOSTIC 1: Channel utilization (zero method-conf channels)
+============================================================
+  X_val.shape=(2925, 32000, 33), n_events=2925
+  Predicting baseline...
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1778174860.970790  396487 service.cc:148] XLA service 0x74b4a40858d0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0000 00:00:1778174860.971054  396487 service.cc:156]   StreamExecutor device (0): NVIDIA GeForce RTX 3070, Compute Capability 8.6
+2026-05-07 19:27:41.039012: I tensorflow/compiler/mlir/tensorflow/utils/dump_mlir_util.cc:268] disabling MLIR crash reproducer, set env var `MLIR_CRASH_REPRODUCER_DIRECTORY` to enable.
+I0000 00:00:1778174861.166353  396487 cuda_dnn.cc:529] Loaded cuDNN version 90300
+I0000 00:00:1778174865.555421  396487 device_compiler.h:188] Compiled cluster using XLA!  This line is logged at most once for the lifetime of the process.
+2026-05-07 19:28:30.501029: I tensorflow/core/framework/local_rendezvous.cc:405] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence
+/home/joshcullinan/RDP_CNN/.venv/lib/python3.12/site-packages/keras/src/trainers/epoch_iterator.py:164: UserWarning: Your input ran out of data; interrupting training. Make sure that your dataset or generator can generate at least `steps_per_epoch * epochs` batches. You may need to use the `.repeat()` function when building your dataset.
+  self._interrupted_warning()
+  BASELINE val F1 (EB=200, thr=0.7): 0.692
+  Predicting with channels 24-33 zeroed...
+2026-05-07 19:29:33.937637: I tensorflow/core/framework/local_rendezvous.cc:405] Local rendezvous is aborting with status: OUT_OF_RANGE: End of sequence
+  ZERO-METHOD-CHANNELS val F1: 0.669
+  Delta (baseline - zeroed): +0.023
+  --> Method channels are DOING WORK (0.023 F1 lift). Model uses them.
+
+============================================================
+DIAGNOSTIC 2: Per-content-length bucket detection rate (TEST)
+============================================================
+  X_test.shape=(5539, 32000, 33), n_events=5539
+  Predicting test...
+  Overall test F1 (EB=200, thr=0.7): 0.309
+
+  Bucket   | n events | both% | one%  | miss% | mean_detected
+  ---------|----------|-------|-------|-------|---------------
+      0- 5000 |        0 |       |       |       |
+   5000-10000 |        0 |       |       |       |
+  10000-15000 |        0 |       |       |       |
+  15000-20000 |        0 |       |       |       |
+  20000-25000 |        0 |       |       |       |
+  25000-32000 |     5539 | 16.6% | 42.9% | 40.4% | 0.762
+
+============================================================
+DIAGNOSTIC 3: RDP-firing coverage (TEST)
+============================================================
+  Test events with RDP fired (PredBPStart non-null): 5539/5539 (100.0%)
+  RDP fired (n=5539): both=16.6% one=42.9% miss=40.4% (mean_det=0.762)
+
+============================================================
+AUX: Near-miss distance distribution (test)
+============================================================
+  |peak - true| <=   200:     1 /  6833  (0.0%)
+  |peak - true| <=   400:  2271 /  6833  (33.2%)
+  |peak - true| <=   800:  2886 /  6833  (42.2%)
+  |peak - true| <=  1600:  3694 /  6833  (54.1%)
+  |peak - true| <=  3200:  4606 /  6833  (67.4%)
+  |peak - true| <=  6400:  5589 /  6833  (81.8%)
+  median: 1297, p75: 4574, p90: 9098
+
+Saved diag_run39.json
