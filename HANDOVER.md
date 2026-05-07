@@ -221,9 +221,13 @@ If run #24 lifts test F1 toward val's 0.28-0.31, the project's "structural val/t
 
 ---
 
-## 11-current. Current state (end of 2026-05-06 session — run #28 LANDED)
+## 11-current. Current state (end of 2026-05-07 session — runs #28-#34 + ensemble)
 
-**Status:** Run #28 KEPT. Test F1 = **0.239** (val-thresh) / **0.308** (test-best). Val F1 = **0.575**. Still below RDP5 (0.367) but above prior CNN best (~0.218). Most importantly: **infrastructure is stable now.**
+**Status:** **Honest interior F1 ceiling at ~0.17 confirmed.** Best honest F1 across 7 architectural/data/augmentation variations + a 4-model ensemble: **F1=0.175 (run #32)**. RDP5 baseline: 0.367. **The dilated-CNN-with-per-position-sigmoid framework cannot break this ceiling.** See "Plateau finding" in the experiment log for the full table and ranked next-step directions.
+
+**Most important learning of this session:** The reported test F1 from any run (e.g. #28d's 0.308) is largely BOUNDARY ARTIFACT — `eval_edge_suppressed.py` with EB=200 reveals the honest interior detection. **All future runs MUST report EB=200 honest F1 alongside the raw number; raw numbers without edge suppression are inflated by 40%+.**
+
+### Earlier this session — run #28d landed (KEPT, infrastructure)
 
 ### What this session delivered
 
@@ -267,10 +271,19 @@ The model learned to output peaks at content/padding boundaries because (a) some
 
 ### Saved artifacts (do not delete)
 
-- `models_test/cnn_breakpoint_final.keras` — run #28d trained model. 514k params. **Boundary-shortcut model — useful as a comparison baseline, do not deploy.**
+- `models_test/cnn_breakpoint_run28d_final.keras` — boundary-shortcut model, raw F1=0.308 / honest F1=0.171. Comparison baseline.
+- `models_test/cnn_breakpoint_run29_final.keras` — BN + edge-aware. Honest F1=0.174.
+- `models_test/cnn_breakpoint_run30_final.keras` — LN + edge-aware. Honest F1=0.170.
+- `models_test/cnn_breakpoint_run31_final.keras` — U-Net 24M params. Honest F1=0.143 (REGRESSED).
+- `models_test/cnn_breakpoint_run32_final.keras` — dilated, n_filters=128, LN, edge-aware. Honest F1=0.175 — **best individual model**.
+- `models_test/cnn_breakpoint_run33_final.keras` — same as #32 with max_files=80 train. Honest F1=0.151 (REGRESSED).
+- `models_test/cnn_breakpoint_run34_final.keras` — same as #32 with position-shift aug. Honest F1=0.171.
+- `eval_ensemble.py` — 4-model averaging eval. Honest F1=0.174. Ensemble doesn't lift over best individual — models make correlated errors.
 - `cache/ds_UnseenTestSet_*.npz/.pkl` — canonical-parser test cache. Saves 10 min per eval.
 - `cache/ds_XML-1..5_*.npz/.pkl` — train+val caches.
-- `eval_only.py` — streaming val+test eval via from_generator. Run via `systemd-run --user --scope -p MemoryMax=20G bash -c 'source .venv/bin/activate && python3 eval_only.py'`. **Note: reports raw F1 inflated by boundary shortcut; use eval_edge_suppressed.py for honest numbers.**
+- `eval_only.py` — streaming val+test eval via from_generator (raw, no EB). **Use eval_run29.py instead — it does the honest EB=200 sweep automatically.**
+- `eval_run29.py` — preferred eval. EB×threshold sweep on val+test, picks val-best, prints honest F1 vs RDP5. Outputs `results_<tag>.json`. Usage: `eval_run29.py <model.keras> <run_tag>`.
+- `train_only.py` — exec's notebook cells 1-22 only, exits cleanly. Bypasses leaky cells 23-40. **Use this instead of run_notebook.py for training.**
 - `eval_edge_suppressed.py` — sweeps edge_buffer × threshold to estimate honest interior F1. Run alongside any inference for a more truthful number.
 - `bucket_diagnostic.py` — per-position-bucket detection rate. Use to detect boundary shortcuts in any future model.
 - `sanity_calibration.py` — val vs test prediction-magnitude comparison.
