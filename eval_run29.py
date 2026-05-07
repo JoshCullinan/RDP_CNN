@@ -86,10 +86,25 @@ def main():
     model = tf.keras.models.load_model(MODEL_NAME, compile=False)
     print(f"  ok. {model.count_params():,} params")
 
-    val_npz = sorted(glob.glob('cache/ds_XML-5_*.npz'))[-1]
+    # Pick caches whose channel count matches the model's expected input.
+    # Multiple cache files can coexist if MAXCHI_WINDOWS changed across runs.
+    n_channels_expected = model.input_shape[-1]
+    def pick_cache(pattern):
+        for p in sorted(glob.glob(pattern), reverse=True):
+            try:
+                with np.load(p) as z:
+                    if z['X'].shape[-1] == n_channels_expected:
+                        return p
+            except Exception:
+                continue
+        # fallback: latest
+        return sorted(glob.glob(pattern))[-1]
+    val_npz = pick_cache('cache/ds_XML-5_*.npz')
     val_pkl = val_npz.replace('.npz', '.pkl')
-    test_npz = sorted(glob.glob('cache/ds_UnseenTestSet_*.npz'))[-1]
+    test_npz = pick_cache('cache/ds_UnseenTestSet_*.npz')
     test_pkl = test_npz.replace('.npz', '.pkl')
+    print(f"  using val cache:  {val_npz}")
+    print(f"  using test cache: {test_npz}")
 
     print(f"\n[{time.strftime('%H:%M:%S')}] VAL eval (EB sweep)")
     d = np.load(val_npz)
