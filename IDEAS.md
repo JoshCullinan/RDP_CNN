@@ -39,7 +39,18 @@ the model class — not just the model size or normalization.
 ## 1. Tier A — highest leverage, ranked
 
 ### A1. Hybrid: feed RDP5/MaxChi posteriors as input channels  ⭐⭐ KEPT — first run beating RDP5
-**Status:** TESTED as run #36 (2026-05-07). **Beats RDP5 on raw F1 (0.397 vs 0.367)**, lifts honest interior F1 from 0.175 to 0.323. Simplest variant tested: 2 Gaussian channels (σ=50) at PredBPStart and PredBPEnd from `.faSimVSRealCompare.csv`. Full per-method p-values (.fa.csv) and per-event scoring stats (.faRecIDTests.csv, 18 stats × 3 roles) UNTESTED — likely additional lift available.
+**Status:** TESTED as run #36 (2026-05-07). **Beats RDP5 on raw F1 (0.397 vs 0.367)**, lifts honest interior F1 from 0.175 to 0.323. Simplest variant tested: 2 Gaussian channels (σ=50) at PredBPStart and PredBPEnd from `.faSimVSRealCompare.csv`.
+
+**A1 extension (run #39 v2, 2026-05-07)**: added 9 per-method confidence
+broadcast scalars from `.fa.csv` (clip(-log10(p_method)/30, 0, 1) per
+method). Val F1 jumped 0.55 → 0.69 (+0.14), but **test honest F1 = 0.309 vs
+run #38 0.313 — FLAT.** Val→test gap widened 0.24 → 0.38. The
+method-confidence signal is in-distribution-specific; simulator's RDP
+calibration differs from UnseenTestSet's. Channel engineering hits
+diminishing returns. Per-event RecombIdentifyStats (.faRecIdentifyStats.csv)
+features were planned as run #40 but DEFERRED — same distribution-shift
+concern likely applies. Pivoting to A2 SpliceAI-32 (representation-capacity
+attack rather than input-richness attack).
 
 **Idea:** Run OpenRDP (or MaxChi/3SEQ) over each `.fa` alignment offline.
 Its per-position breakpoint posterior becomes channels 23+ in `X`. Train
