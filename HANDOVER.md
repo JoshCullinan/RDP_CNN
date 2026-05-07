@@ -221,9 +221,19 @@ If run #24 lifts test F1 toward val's 0.28-0.31, the project's "structural val/t
 
 ---
 
-## 11-current. Current state (end of 2026-05-07 session — RDP-hybrid breakthrough)
+## 11-current. Current state (end of 2026-05-07 session — RDP-hybrid + dropout sweet spot)
 
-**Status: RUN #36 BEATS RDP5.** Raw test F1 = **0.397** vs RDP5 baseline 0.367. Honest interior F1 nearly doubled to **0.323** (vs prior plateau 0.175).
+**Best deployment model: run #38** (RDP channels + RDP-dropout p=0.1).
+  - Test honest F1 at val-selected threshold (0.6): **0.313**
+  - Test raw F1 at val-selected threshold (0.4): **0.366** (matches RDP5 0.367)
+  - Val EB=200 best F1: **0.713**
+  - Val→test honest gap: 0.40 (narrowest)
+
+**Best raw-F1 model: run #36** (RDP channels, no dropout).
+  - Raw test F1: **0.397** (beats RDP5's 0.367)
+  - Honest test F1 best across thresholds: **0.323**
+
+Net session lift: prior plateau 0.175 honest → 0.313 honest at val-selected threshold (**2.1× improvement**). Raw F1: 0.218 → 0.397 (**1.8× improvement**).
 
 **The fix that broke the plateau:** read `PredBPStart` and `PredBPEnd` from `.faSimVSRealCompare.csv` — RDP5's outputs are already on disk per file from a prior project. Encode them as 2 Gaussian channels (σ=50) at positions 22-23 of the input. The CNN refines RDP's localization. See run #36 in the experiment log.
 
