@@ -118,7 +118,7 @@ import re
 m = re.search(r"_versioned = 'models_test/cnn_breakpoint_run(\d+)_final\.keras'", src22)
 if m:
     old_run = m.group(1)
-    new_run = '41'  # caller can re-run with custom number if doing >1 A2 variant
+    new_run = '40'  # A2 SpliceAI-32 — first arch pivot after #39 channel-eng plateau
     src22 = src22.replace(
         f"_versioned = 'models_test/cnn_breakpoint_run{old_run}_final.keras'",
         f"_versioned = 'models_test/cnn_breakpoint_run{new_run}_final.keras'",

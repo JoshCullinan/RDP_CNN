@@ -81,7 +81,12 @@ Single change to `parse_simulation` adds N more channels.
 ---
 
 ### A2. SpliceAI-32 backbone — match SOTA depth
-**Status:** UNTESTED.
+**Status:** TESTED as run #40 (2026-05-07). **REGRESSION.** Honest F1 = 0.280
+vs run #38 baseline 0.313. Val_aupr ceiling was higher (0.480 vs 0.400) but
+val→test gap unchanged at 0.40. Three-run evidence (#38, #39, #40) now
+shows test honest F1 anchored ~0.31 regardless of architecture/channels.
+Capacity isn't the bottleneck — val→test distribution alignment is.
+KEPT model on disk (cnn_breakpoint_run40_final.keras) for forensic reference.
 
 **Idea:** Replace `build_cnn` with the SpliceAI-10k topology: 32
 ResidualUnits (Conv→BN→ReLU twice, with dilations 1→4→10→25), skip-merges
