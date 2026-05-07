@@ -38,8 +38,8 @@ the model class — not just the model size or normalization.
 
 ## 1. Tier A — highest leverage, ranked
 
-### A1. Hybrid: feed RDP5/MaxChi posteriors as input channels  ⭐ HIGHEST P(WIN)
-**Status:** UNTESTED.
+### A1. Hybrid: feed RDP5/MaxChi posteriors as input channels  ⭐⭐ KEPT — first run beating RDP5
+**Status:** TESTED as run #36 (2026-05-07). **Beats RDP5 on raw F1 (0.397 vs 0.367)**, lifts honest interior F1 from 0.175 to 0.323. Simplest variant tested: 2 Gaussian channels (σ=50) at PredBPStart and PredBPEnd from `.faSimVSRealCompare.csv`. Full per-method p-values (.fa.csv) and per-event scoring stats (.faRecIDTests.csv, 18 stats × 3 roles) UNTESTED — likely additional lift available.
 
 **Idea:** Run OpenRDP (or MaxChi/3SEQ) over each `.fa` alignment offline.
 Its per-position breakpoint posterior becomes channels 23+ in `X`. Train

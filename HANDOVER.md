@@ -221,7 +221,13 @@ If run #24 lifts test F1 toward val's 0.28-0.31, the project's "structural val/t
 
 ---
 
-## 11-current. Current state (end of 2026-05-07 session — runs #28-#34 + ensemble)
+## 11-current. Current state (end of 2026-05-07 session — RDP-hybrid breakthrough)
+
+**Status: RUN #36 BEATS RDP5.** Raw test F1 = **0.397** vs RDP5 baseline 0.367. Honest interior F1 nearly doubled to **0.323** (vs prior plateau 0.175).
+
+**The fix that broke the plateau:** read `PredBPStart` and `PredBPEnd` from `.faSimVSRealCompare.csv` — RDP5's outputs are already on disk per file from a prior project. Encode them as 2 Gaussian channels (σ=50) at positions 22-23 of the input. The CNN refines RDP's localization. See run #36 in the experiment log.
+
+**Earlier in this session — honest F1 plateau confirmed at ~0.17 across 8 architectural variations (still relevant context).**
 
 **Status:** **Honest interior F1 ceiling at ~0.17 confirmed.** Best honest F1 across 7 architectural/data/augmentation variations + a 4-model ensemble: **F1=0.175 (run #32)**. RDP5 baseline: 0.367. **The dilated-CNN-with-per-position-sigmoid framework cannot break this ceiling.** See "Plateau finding" in the experiment log for the full table and ranked next-step directions.
 
