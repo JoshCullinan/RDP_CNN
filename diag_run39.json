@@ -1,0 +1,50 @@
+{
+  "model": "models_test/cnn_breakpoint_run39_final.keras",
+  "val_baseline_f1": 0.6924857275111865,
+  "val_zero_method_f1": 0.6692524146322913,
+  "val_method_channel_lift": 0.023233312878895185,
+  "test_f1": 0.3085300782106571,
+  "test_n_events": 5539,
+  "test_buckets": [
+    {
+      "lo": 0,
+      "hi": 5000,
+      "n": 0,
+      "both_pct": 0
+    },
+    {
+      "lo": 5000,
+      "hi": 10000,
+      "n": 0,
+      "both_pct": 0
+    },
+    {
+      "lo": 10000,
+      "hi": 15000,
+      "n": 0,
+      "both_pct": 0
+    },
+    {
+      "lo": 15000,
+      "hi": 20000,
+      "n": 0,
+      "both_pct": 0
+    },
+    {
+      "lo": 20000,
+      "hi": 25000,
+      "n": 0,
+      "both_pct": 0
+    },
+    {
+      "lo": 25000,
+      "hi": 32000,
+      "n": 5539,
+      "both_pct": 0.1664560389962087
+    }
+  ],
+  "rdp_fired_n": 5539,
+  "rdp_fired_both_pct": 16.64560389962087,
+  "rdp_not_fired_n": 0,
+  "rdp_not_fired_both_pct": 0
+}

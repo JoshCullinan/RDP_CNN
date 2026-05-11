@@ -7,6 +7,14 @@ dataRaw/
 # Session artifacts
 exec_log.txt
 run_log.txt
+exec_log_*.txt
+eval_log_*.txt
+cache_test_log_*.txt
+eval_run41_*.log
+eval_run41_unseen_*.log
+cache_test_run41_*.log
+*.ipynb.bak_*
+__pycache__/
 
 # Trained-model checkpoints — large + reproducible by re-running the notebook.
 # If you want to ship a model snapshot to another machine, copy models_test/
@@ -23,3 +31,4 @@ figures/
 #.tar files
 models_test.tar
 model_backup.tar
+history_*.json
