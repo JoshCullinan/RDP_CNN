@@ -10,6 +10,10 @@ run_log.txt
 exec_log_*.txt
 eval_log_*.txt
 cache_test_log_*.txt
+eval_run41_*.log
+eval_run41_unseen_*.log
+cache_test_run41_*.log
+*.ipynb.bak_*
 __pycache__/
 
 # Trained-model checkpoints — large + reproducible by re-running the notebook.
