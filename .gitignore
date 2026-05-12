@@ -32,3 +32,22 @@ figures/
 models_test.tar
 model_backup.tar
 history_*.json
+# Run #42-era transient logs and status files
+regen_*.log
+cache_unseen_run42*.log
+score_informative_*.log
+copy_batch003_*.log
+exec_log_run42c_*.txt
+eval_run42c_*.log
+REGEN_STATUS.txt
+DATA_READY_STATUS.txt
+regen_completion_history.log
+regen_completion_watcher.sh
+data_ready_watcher.sh
+
+# One-shot patcher scripts (kept for reproducibility but not load-bearing)
+_patch_*.py
+_revert_*.py
+get_diag_settings.py
+get_path_A.py
+get_re_apply_pathA.py
