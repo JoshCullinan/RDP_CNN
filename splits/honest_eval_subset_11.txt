@@ -1,0 +1,11 @@
+dataRaw/UnseenTestSet/alignment_TestSet_2022-08-20-15_55_16_3300-0.07-0.000116-150.fa
+dataRaw/UnseenTestSet/alignment_TestSet_2022-08-21-01_38_14_3300-0.07-0.000114-100.fa
+dataRaw/UnseenTestSet/alignment_TestSet_2022-08-21-01_38_14_3300-0.07-0.000114-150.fa
+dataRaw/UnseenTestSet/alignment_TestSet_2022-08-23-08_50_09_3300-0.065-0.000115-200.fa
+dataRaw/UnseenTestSet/alignment_TestSet_2022-08-23-08_50_09_3300-0.065-0.000116-50.fa
+dataRaw/UnseenTestSet/alignment_TestSet_2022-08-24-12_11_13_3300-0.07-0.000115-100.fa
+dataRaw/UnseenTestSet/alignment_TestSet_2022-08-24-12_11_13_3300-0.075-0.000115-150.fa
+dataRaw/UnseenTestSet/alignment_TestSet_2022-08-24-19_38_57_3300-0.07-0.000115-100.fa
+dataRaw/UnseenTestSet/alignment_TestSet_2022-08-24-19_38_57_3300-0.07-0.000115-150.fa
+dataRaw/UnseenTestSet/alignment_TestSet_3500-0.07-0.000114-200.fa
+dataRaw/UnseenTestSet/alignment_TestSet_3500-0.07-0.000116-150.fa
