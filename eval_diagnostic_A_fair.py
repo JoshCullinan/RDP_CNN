@@ -113,8 +113,17 @@ def main():
     heldout = set(Path(line.strip()).name for line in HELDOUT_FILE.read_text().splitlines() if line.strip())
     print(f"Held-out subset: N={len(heldout)} files")
 
+    partial_dir = Path('results_diagnostic_A_partial')
+    partial_dir.mkdir(exist_ok=True)
+
     results = {}
     for tag, model_path in MODELS:
+        per_model_json = partial_dir / f'{tag}.json'
+        if per_model_json.exists():
+            print(f"\n{'='*70}\n[{time.strftime('%H:%M:%S')}] {tag}: cached at {per_model_json} — skipping")
+            with per_model_json.open() as f:
+                results[tag] = json.load(f)
+            continue
         print(f"\n{'='*70}\n[{time.strftime('%H:%M:%S')}] {tag}: {model_path}")
         model = tf.keras.models.load_model(model_path, compile=False)
         n_ch = model.input_shape[-1]
@@ -187,6 +196,9 @@ def main():
             'best_sub_eb0': {'thr': best_thr_sub_0, **sub_res[f'eb=0_thr={best_thr_sub_0}']},
             'best_sub_eb200': {'thr': best_thr_sub_200, **sub_res[f'eb=200_thr={best_thr_sub_200}']},
         }
+        with per_model_json.open('w') as f:
+            json.dump(results[tag], f, indent=2, default=str)
+        print(f"  saved partial: {per_model_json}")
 
         del X_full, X_sub, y_full, y_sub, meta_full, meta_sub, model
         gc.collect()
