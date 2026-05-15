@@ -200,30 +200,46 @@ def main():
     ap.add_argument('--variant', required=True, choices=['B2', 'C'])
     ap.add_argument('--epochs', type=int, default=EPOCHS)
     ap.add_argument('--out-dir', default='models_test')
+    ap.add_argument('--tag', default=None,
+                    help='Override the default model tag (e.g., runB2_7k). '
+                         'When provided, output filenames use this tag instead of '
+                         'the variant default (runB2_no_rdp_channels / runC_extended_rf).')
+    ap.add_argument('--train-cache', default=CACHE_TRAIN,
+                    help='Path to train .npz cache (default: run41 4000-event cache).')
+    ap.add_argument('--val-cache', default=CACHE_VAL,
+                    help='Path to val .npz cache (default: run41 1500-event cache).')
     args = ap.parse_args()
 
-    tag = {'B2': 'runB2_no_rdp_channels', 'C': 'runC_extended_rf'}[args.variant]
+    default_tag = {'B2': 'runB2_no_rdp_channels', 'C': 'runC_extended_rf'}[args.variant]
+    tag = args.tag if args.tag is not None else default_tag
     final_path = Path(args.out_dir) / f'cnn_breakpoint_{tag}_final.keras'
     best_path  = Path(args.out_dir) / f'cnn_breakpoint_{tag}_best.keras'
     last_path  = Path(args.out_dir) / f'cnn_breakpoint_{tag}_last.keras'
     history_path = Path(args.out_dir) / f'history_{tag}.json'
 
+    train_cache = args.train_cache
+    val_cache   = args.val_cache
+    train_pkl = train_cache.replace('.npz', '.pkl')
+    val_pkl   = val_cache.replace('.npz', '.pkl')
+
     if final_path.exists():
         print(f"FINAL exists: {final_path} — exiting (idempotent)", flush=True)
         return 0
 
-    print(f"[{time.strftime('%H:%M:%S')}] === Diagnostic {args.variant} ===", flush=True)
+    print(f"[{time.strftime('%H:%M:%S')}] === Diagnostic {args.variant} (tag={tag}) ===", flush=True)
     print(f"  variant={args.variant}", flush=True)
     print(f"  dilations={variant_dilations(args.variant)}", flush=True)
+    print(f"  train_cache={train_cache}", flush=True)
+    print(f"  val_cache  ={val_cache}", flush=True)
     print(f"  out_final={final_path}", flush=True)
     print(f"  out_best ={best_path}", flush=True)
     print(f"  out_last ={last_path}", flush=True)
 
     # ---- Load data ----
     print(f"\n[{time.strftime('%H:%M:%S')}] LOAD TRAIN", flush=True)
-    X_train, y_train, meta_train = load_cache(CACHE_TRAIN, PKL_TRAIN)
+    X_train, y_train, meta_train = load_cache(train_cache, train_pkl)
     print(f"\n[{time.strftime('%H:%M:%S')}] LOAD VAL", flush=True)
-    X_val, y_val, meta_val = load_cache(CACHE_VAL, PKL_VAL)
+    X_val, y_val, meta_val = load_cache(val_cache, val_pkl)
 
     # Variant patch on X
     X_train = apply_variant_x(X_train, args.variant)
