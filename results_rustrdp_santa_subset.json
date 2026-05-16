@@ -1,0 +1,37 @@
+{
+  "methods": [
+    "maxchi",
+    "rdp"
+  ],
+  "max_pvalue": 0.05,
+  "tolerance": 200,
+  "subset_file": "splits/honest_eval_subset_11.txt",
+  "n_events": 584,
+  "per_method": {
+    "maxchi": {
+      "tp": 207,
+      "fp": 759,
+      "fn": 961,
+      "precision": 0.21428571428571427,
+      "recall": 0.17722602739726026,
+      "f1": 0.19400187441424555,
+      "events_both": 0,
+      "events_one": 207,
+      "events_missed": 377,
+      "events_total": 584
+    },
+    "rdp": {
+      "tp": 414,
+      "fp": 3682,
+      "fn": 754,
+      "precision": 0.10107421875,
+      "recall": 0.3544520547945205,
+      "f1": 0.15729483282674772,
+      "events_both": 64,
+      "events_one": 286,
+      "events_missed": 234,
+      "events_total": 584
+    }
+  },
+  "cnn_runB2_sub_f1_at_eb25": 0.448
+}

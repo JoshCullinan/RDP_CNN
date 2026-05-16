@@ -1,0 +1,76 @@
+{
+  "methods": [
+    "maxchi",
+    "rdp",
+    "chimaera",
+    "siscan",
+    "bootscan"
+  ],
+  "max_pvalue": 1.0,
+  "tolerance": 200,
+  "subset_file": "splits/honest_eval_subset_11.txt",
+  "n_events": 584,
+  "per_method": {
+    "maxchi": {
+      "tp": 243,
+      "fp": 925,
+      "fn": 925,
+      "precision": 0.20804794520547945,
+      "recall": 0.20804794520547945,
+      "f1": 0.20804794520547945,
+      "events_both": 0,
+      "events_one": 243,
+      "events_missed": 341,
+      "events_total": 584
+    },
+    "rdp": {
+      "tp": 540,
+      "fp": 12904,
+      "fn": 628,
+      "precision": 0.04016661707825052,
+      "recall": 0.4623287671232877,
+      "f1": 0.07391185327128387,
+      "events_both": 115,
+      "events_one": 310,
+      "events_missed": 159,
+      "events_total": 584
+    },
+    "chimaera": {
+      "tp": 172,
+      "fp": 3318,
+      "fn": 996,
+      "precision": 0.0492836676217765,
+      "recall": 0.14726027397260275,
+      "f1": 0.07385143838557322,
+      "events_both": 17,
+      "events_one": 138,
+      "events_missed": 429,
+      "events_total": 584
+    },
+    "siscan": {
+      "tp": 378,
+      "fp": 14376,
+      "fn": 790,
+      "precision": 0.025620170801138674,
+      "recall": 0.3236301369863014,
+      "f1": 0.04748147217686221,
+      "events_both": 40,
+      "events_one": 298,
+      "events_missed": 246,
+      "events_total": 584
+    },
+    "bootscan": {
+      "tp": 415,
+      "fp": 16261,
+      "fn": 753,
+      "precision": 0.02488606380426961,
+      "recall": 0.3553082191780822,
+      "f1": 0.04651423447657476,
+      "events_both": 75,
+      "events_one": 265,
+      "events_missed": 244,
+      "events_total": 584
+    }
+  },
+  "cnn_runB2_sub_f1_at_eb25": 0.448
+}
