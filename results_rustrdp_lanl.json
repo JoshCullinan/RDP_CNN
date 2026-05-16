@@ -1,0 +1,137 @@
+{
+  "methods": [
+    "maxchi",
+    "rdp",
+    "chimaera",
+    "siscan",
+    "bootscan"
+  ],
+  "max_pvalue": 0.5,
+  "tolerance": 200,
+  "per_crf": {
+    "CRF01_AE": {
+      "skipped": true,
+      "reason": "missing data/lanl_crf/triplets/CRF01_AE.fa"
+    },
+    "CRF02_AG": {
+      "skipped": true,
+      "reason": "missing data/lanl_crf/triplets/CRF02_AG.fa"
+    },
+    "CRF07_BC": {
+      "truth_bps": [
+        1269,
+        1410,
+        2080,
+        2620,
+        3010,
+        3310,
+        5699,
+        6310,
+        8796,
+        9058
+      ],
+      "per_method": {
+        "maxchi": {
+          "n_rows": 1,
+          "n_pred_bps": 2,
+          "tp": 1,
+          "fp": 1,
+          "fn": 9,
+          "precision": 0.5,
+          "recall": 0.1,
+          "f1": 0.16666666666666669
+        },
+        "rdp": {
+          "n_rows": 1,
+          "n_pred_bps": 2,
+          "tp": 0,
+          "fp": 2,
+          "fn": 10,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "chimaera": {
+          "n_rows": 3,
+          "n_pred_bps": 6,
+          "tp": 2,
+          "fp": 4,
+          "fn": 8,
+          "precision": 0.3333333333333333,
+          "recall": 0.2,
+          "f1": 0.25
+        },
+        "siscan": {
+          "n_rows": 1,
+          "n_pred_bps": 2,
+          "tp": 0,
+          "fp": 2,
+          "fn": 10,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "bootscan": {
+          "n_rows": 31,
+          "n_pred_bps": 62,
+          "tp": 8,
+          "fp": 54,
+          "fn": 2,
+          "precision": 0.12903225806451613,
+          "recall": 0.8,
+          "f1": 0.2222222222222222
+        }
+      }
+    },
+    "CRF08_BC": {
+      "skipped": true,
+      "reason": "missing data/lanl_crf/triplets/CRF08_BC.fa"
+    },
+    "CRF12_BF": {
+      "skipped": true,
+      "reason": "missing data/lanl_crf/triplets/CRF12_BF.fa"
+    }
+  },
+  "aggregate": {
+    "maxchi": {
+      "tp": 1,
+      "fp": 1,
+      "fn": 9,
+      "precision": 0.5,
+      "recall": 0.1,
+      "f1": 0.16666666666666669
+    },
+    "rdp": {
+      "tp": 0,
+      "fp": 2,
+      "fn": 10,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "chimaera": {
+      "tp": 2,
+      "fp": 4,
+      "fn": 8,
+      "precision": 0.3333333333333333,
+      "recall": 0.2,
+      "f1": 0.25
+    },
+    "siscan": {
+      "tp": 0,
+      "fp": 2,
+      "fn": 10,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0
+    },
+    "bootscan": {
+      "tp": 8,
+      "fp": 54,
+      "fn": 2,
+      "precision": 0.12903225806451613,
+      "recall": 0.8,
+      "f1": 0.2222222222222222
+    }
+  }
+}
