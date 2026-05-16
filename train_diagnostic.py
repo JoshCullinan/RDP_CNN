@@ -247,10 +247,13 @@ def main():
 
     # Build edge-suppressed masks
     print(f"\n[{time.strftime('%H:%M:%S')}] EDGE-SUPPRESS WEIGHTS (eb={EDGE_BUFFER})", flush=True)
-    # Padding mask: position i is content if any channel is non-zero.
-    # We can compute this from y or X; X is faster (fp16, no per-channel cast).
+    # Per-event: a full-tensor astype(float32) on 14.78GB fp16 X_train balloons
+    # to ~30GB and OOM-kills the box (this crashed Wezterm on 2026-05-16).
     def padding_mask(X):
-        return (X.astype(np.float32).sum(axis=-1) > 0)
+        out = np.empty(X.shape[:2], dtype=bool)
+        for i in range(X.shape[0]):
+            out[i] = (X[i] != 0).any(axis=-1)
+        return out
     m_train = padding_mask(X_train)
     m_val   = padding_mask(X_val)
     w_train = edge_suppress_weights(m_train)
