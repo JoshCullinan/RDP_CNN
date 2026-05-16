@@ -1,7 +1,10 @@
-# Python 3.12. On Apple Silicon, tensorflow-metal provides GPU support;
-# without it, TensorFlow silently falls back to CPU.
-tensorflow==2.18.1
-tensorflow-metal==1.2.0; sys_platform == "darwin" and platform_machine == "arm64"
+# Python 3.12. Linux is the primary target — install with the `and-cuda`
+# extra so TF pulls its own CUDA 12.x wheels and finds the NVIDIA GPU.
+# On macOS/Windows-without-CUDA the bare `tensorflow` wheel runs CPU-only;
+# on Apple Silicon, additionally `pip install tensorflow-metal==1.2.0`
+# for Metal GPU support.
+tensorflow[and-cuda]==2.18.1; sys_platform == "linux"
+tensorflow==2.18.1; sys_platform != "linux"
 
 biopython==1.87
 numpy==2.0.2

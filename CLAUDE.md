@@ -25,7 +25,7 @@ Key implications of the goal that shape what's worth trying:
 ## Environment
 
 - Python 3.12 in `.venv/`
-- TensorFlow 2.18 with `tensorflow-metal` 1.2 (Apple Silicon GPU). On macOS Silicon, GPU support requires `tensorflow-metal` to be installed; without it, training falls back to CPU silently.
+- TensorFlow 2.18.1 with bundled CUDA 12.x wheels (`tensorflow[and-cuda]`) on Linux + NVIDIA. Current dev box: bare-metal Ubuntu 26.04, NVIDIA RTX 3070 (8 GB, compute 8.6), driver 595.x. On other platforms TF falls back to CPU silently.
 - BioPython 1.87 for FASTA parsing, scipy for `find_peaks`-based evaluation.
 
 ```bash
