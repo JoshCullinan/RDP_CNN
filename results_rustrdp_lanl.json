@@ -14,8 +14,70 @@
       "reason": "missing data/lanl_crf/triplets/CRF01_AE.fa"
     },
     "CRF02_AG": {
-      "skipped": true,
-      "reason": "missing data/lanl_crf/triplets/CRF02_AG.fa"
+      "truth_bps": [
+        789,
+        2155,
+        2625,
+        3274,
+        4174,
+        4874,
+        6224,
+        8311,
+        8588,
+        9089
+      ],
+      "per_method": {
+        "maxchi": {
+          "n_rows": 1,
+          "n_pred_bps": 2,
+          "tp": 1,
+          "fp": 1,
+          "fn": 9,
+          "precision": 0.5,
+          "recall": 0.1,
+          "f1": 0.16666666666666669
+        },
+        "rdp": {
+          "n_rows": 10,
+          "n_pred_bps": 20,
+          "tp": 7,
+          "fp": 13,
+          "fn": 3,
+          "precision": 0.35,
+          "recall": 0.7,
+          "f1": 0.4666666666666667
+        },
+        "chimaera": {
+          "n_rows": 3,
+          "n_pred_bps": 6,
+          "tp": 1,
+          "fp": 5,
+          "fn": 9,
+          "precision": 0.16666666666666666,
+          "recall": 0.1,
+          "f1": 0.125
+        },
+        "siscan": {
+          "n_rows": 1,
+          "n_pred_bps": 2,
+          "tp": 1,
+          "fp": 1,
+          "fn": 9,
+          "precision": 0.5,
+          "recall": 0.1,
+          "f1": 0.16666666666666669
+        },
+        "bootscan": {
+          "n_rows": 13,
+          "n_pred_bps": 26,
+          "tp": 7,
+          "fp": 19,
+          "fn": 3,
+          "precision": 0.2692307692307692,
+          "recall": 0.7,
+          "f1": 0.3888888888888889
+        }
+      }
     },
     "CRF07_BC": {
       "truth_bps": [
@@ -84,54 +146,173 @@
       }
     },
     "CRF08_BC": {
-      "skipped": true,
-      "reason": "missing data/lanl_crf/triplets/CRF08_BC.fa"
+      "truth_bps": [
+        1440,
+        1630,
+        2852,
+        3170,
+        8802,
+        9010
+      ],
+      "per_method": {
+        "maxchi": {
+          "n_rows": 1,
+          "n_pred_bps": 2,
+          "tp": 1,
+          "fp": 1,
+          "fn": 5,
+          "precision": 0.5,
+          "recall": 0.16666666666666666,
+          "f1": 0.25
+        },
+        "rdp": {
+          "n_rows": 6,
+          "n_pred_bps": 12,
+          "tp": 6,
+          "fp": 6,
+          "fn": 0,
+          "precision": 0.5,
+          "recall": 1.0,
+          "f1": 0.6666666666666666
+        },
+        "chimaera": {
+          "n_rows": 3,
+          "n_pred_bps": 6,
+          "tp": 1,
+          "fp": 5,
+          "fn": 5,
+          "precision": 0.16666666666666666,
+          "recall": 0.16666666666666666,
+          "f1": 0.16666666666666666
+        },
+        "siscan": {
+          "n_rows": 1,
+          "n_pred_bps": 2,
+          "tp": 0,
+          "fp": 2,
+          "fn": 6,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "bootscan": {
+          "n_rows": 14,
+          "n_pred_bps": 28,
+          "tp": 4,
+          "fp": 24,
+          "fn": 2,
+          "precision": 0.14285714285714285,
+          "recall": 0.6666666666666666,
+          "f1": 0.23529411764705882
+        }
+      }
     },
     "CRF12_BF": {
-      "skipped": true,
-      "reason": "missing data/lanl_crf/triplets/CRF12_BF.fa"
+      "truth_bps": [
+        951,
+        2640,
+        2981,
+        3025,
+        3688,
+        5945,
+        6209,
+        8482,
+        8660
+      ],
+      "per_method": {
+        "maxchi": {
+          "n_rows": 1,
+          "n_pred_bps": 2,
+          "tp": 1,
+          "fp": 1,
+          "fn": 8,
+          "precision": 0.5,
+          "recall": 0.1111111111111111,
+          "f1": 0.1818181818181818
+        },
+        "rdp": {
+          "n_rows": 4,
+          "n_pred_bps": 8,
+          "tp": 7,
+          "fp": 1,
+          "fn": 2,
+          "precision": 0.875,
+          "recall": 0.7777777777777778,
+          "f1": 0.823529411764706
+        },
+        "chimaera": {
+          "n_rows": 3,
+          "n_pred_bps": 6,
+          "tp": 0,
+          "fp": 6,
+          "fn": 9,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "siscan": {
+          "n_rows": 1,
+          "n_pred_bps": 2,
+          "tp": 0,
+          "fp": 2,
+          "fn": 9,
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0
+        },
+        "bootscan": {
+          "n_rows": 20,
+          "n_pred_bps": 40,
+          "tp": 4,
+          "fp": 36,
+          "fn": 5,
+          "precision": 0.1,
+          "recall": 0.4444444444444444,
+          "f1": 0.163265306122449
+        }
+      }
     }
   },
   "aggregate": {
     "maxchi": {
-      "tp": 1,
-      "fp": 1,
-      "fn": 9,
+      "tp": 4,
+      "fp": 4,
+      "fn": 31,
       "precision": 0.5,
-      "recall": 0.1,
-      "f1": 0.16666666666666669
+      "recall": 0.11428571428571428,
+      "f1": 0.18604651162790695
     },
     "rdp": {
-      "tp": 0,
-      "fp": 2,
-      "fn": 10,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0
+      "tp": 20,
+      "fp": 22,
+      "fn": 15,
+      "precision": 0.47619047619047616,
+      "recall": 0.5714285714285714,
+      "f1": 0.5194805194805195
     },
     "chimaera": {
-      "tp": 2,
-      "fp": 4,
-      "fn": 8,
-      "precision": 0.3333333333333333,
-      "recall": 0.2,
-      "f1": 0.25
+      "tp": 4,
+      "fp": 20,
+      "fn": 31,
+      "precision": 0.16666666666666666,
+      "recall": 0.11428571428571428,
+      "f1": 0.13559322033898305
     },
     "siscan": {
-      "tp": 0,
-      "fp": 2,
-      "fn": 10,
-      "precision": 0.0,
-      "recall": 0.0,
-      "f1": 0.0
+      "tp": 1,
+      "fp": 7,
+      "fn": 34,
+      "precision": 0.125,
+      "recall": 0.02857142857142857,
+      "f1": 0.04651162790697674
     },
     "bootscan": {
-      "tp": 8,
-      "fp": 54,
-      "fn": 2,
-      "precision": 0.12903225806451613,
-      "recall": 0.8,
-      "f1": 0.2222222222222222
+      "tp": 23,
+      "fp": 133,
+      "fn": 12,
+      "precision": 0.14743589743589744,
+      "recall": 0.6571428571428571,
+      "f1": 0.24083769633507854
     }
   }
 }
