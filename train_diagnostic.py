@@ -139,6 +139,23 @@ def edge_suppress_weights(mask, eb=EDGE_BUFFER):
     return out
 
 
+# ---------------- Gaussian label rebake (for --label-sigma sweep) -------------
+def regenerate_gaussian_labels(meta, sigma, length=MAX_SEQ_LEN):
+    """Rebake per-position Gaussian labels at a custom sigma from meta BP
+    positions. Replaces y_g during a training run without rebuilding the cache."""
+    n = len(meta)
+    y = np.zeros((n, length), dtype=np.float32)
+    pos = np.arange(length, dtype=np.float32)
+    for i, m in enumerate(meta):
+        for bp in [int(m['bp_start']), int(m['bp_end'])]:
+            if 0 <= bp < length:
+                y[i] = np.maximum(
+                    y[i],
+                    np.exp(-0.5 * ((pos - bp) / float(sigma)) ** 2).astype(np.float32),
+                )
+    return y
+
+
 # ---------------- Cache loading (run41 pool, no astype copy) ------------------
 def load_cache(npz_path, pkl_path):
     print(f"  loading {npz_path}", flush=True)
@@ -221,6 +238,10 @@ def main():
                     help='Path to train .npz cache (default: run41 4000-event cache).')
     ap.add_argument('--val-cache', default=CACHE_VAL,
                     help='Path to val .npz cache (default: run41 1500-event cache).')
+    ap.add_argument('--label-sigma', type=float, default=None,
+                    help='If set, regenerate Gaussian labels at this sigma from '
+                         'meta BP positions instead of using cached y_g (default '
+                         'cache sigma = 20).')
     args = ap.parse_args()
 
     default_tag = {'B2': 'runB2_no_rdp_channels', 'C': 'runC_extended_rf',
@@ -259,6 +280,14 @@ def main():
     # Variant patch on X
     X_train = apply_variant_x(X_train, args.variant)
     X_val   = apply_variant_x(X_val,   args.variant)
+
+    # Optionally rebake labels at a custom sigma
+    if args.label_sigma is not None:
+        print(f"\n[{time.strftime('%H:%M:%S')}] REBAKE GAUSSIAN LABELS at sigma={args.label_sigma}", flush=True)
+        y_train = regenerate_gaussian_labels(meta_train, args.label_sigma)
+        y_val   = regenerate_gaussian_labels(meta_val,   args.label_sigma)
+        print(f"  rebaked y_train shape={y_train.shape}, sum>0={int((y_train > 0).sum())}", flush=True)
+        print(f"  rebaked y_val   shape={y_val.shape}, sum>0={int((y_val > 0).sum())}", flush=True)
 
     # Build edge-suppressed masks
     print(f"\n[{time.strftime('%H:%M:%S')}] EDGE-SUPPRESS WEIGHTS (eb={EDGE_BUFFER})", flush=True)
