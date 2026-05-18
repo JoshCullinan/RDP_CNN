@@ -34,16 +34,28 @@ Each milestone is sized to be **achievable by a single agent run** (a few hours 
 
 ### Phase 0 — Foundations (no model training yet)
 
-#### M0.1 — Unified data loader
+#### M0.1 — ✅ DONE 2026-05-18 — Unified data loader
 
-- **Goal:** one Python module that loads any FASTA-event triplet across the three on-disk schemas.
-- **Schemas to handle:**
-  - Old (XML-1..5): `*.fa` + `*.faSimVSRealCompare.csv` + `*.faRecombIdentifyStats.csv`
-  - New short (XML-6): `*.fa` + `*.faSimVSRealCompare.csv`
-  - New long (long_content_30k_001..003): `*.fa` + `*.faSimVSRealCompare.csv` + `*.faParents.csv`
-- **Deliverable:** `data_loader_v2.py` with a `load_events(dir, max_files=None) -> iterator of TripletEvent` API where `TripletEvent` carries `(R_seq, P1_seq, P2_seq, bp_positions, recomb_id, original_len, source_dir)`.
-- **Success criterion:** loader runs across all 10 source directories without errors and produces a count matching the estimates in the training plan (~315k total events ±5%).
-- **Out of scope:** caching, model integration, augmentation — just the loader.
+Artifacts: `data_loader_v2.py`, `test_data_loader_v2.py`, `audit_full.log` (commit ca36431).
+
+| Dir | Triplets | Unique events | Multiplicity |
+|---|---:|---:|---:|
+| XML-1 | 32,405 | 32,405 | 1.0 |
+| XML-2 | 39,068 | 39,068 | 1.0 |
+| XML-3 | 38,921 | 38,921 | 1.0 |
+| XML-4 | 18,816 | 18,816 | 1.0 |
+| XML-5 | 28,959 | 28,959 | 1.0 |
+| XML-6 | 0 | 0 | — (no parent CSV) |
+| long_content_30k_001 | 18,290 | 1,059 | 17.3 |
+| long_content_30k_002 | 2,027,957 | 77,707 | 26.1 |
+| long_content_30k_003 | 1,259,145 | 44,409 | 28.4 |
+| UnseenTestSet | 5,539 | 5,539 | 1.0 |
+| **TOTAL** | **3,469,100** | **286,883** | — |
+
+Key findings that change downstream milestones:
+- Unique-event total 286,883 is ~9% below the prior estimate (315k); triplet-level total is 11× higher.
+- **XML-6 confirmed unusable for BP supervision** (no `.faParents.csv` or `.faRecombIdentifyStats.csv` on disk — SANTA-only dump, RDP5 never ran). Sequences still usable for MLM pretraining (Phase 1); cannot supply parent IDs for triplet training. The 80/20 XML-6 split in M0.3 should be reframed as "XML-6 → MLM-only corpus."
+- **Long-content sibling-recombinant multiplicity** (17–28×) means each unique BP configuration appears as many correlated training rows. M0.2 caches all rows so downstream code can choose; M3 should dedupe-by-event or downweight within-event correlation in batches to avoid effective-batch-size collapse.
 
 #### M0.2 — Sharded cache builder
 
@@ -56,9 +68,10 @@ Each milestone is sized to be **achievable by a single agent run** (a few hours 
 #### M0.3 — Held-out split definition
 
 - **Goal:** lock the train/val/test split before any model touches the data, to prevent leakage.
-- **Splits:**
-  - TRAIN: XML-1..4, long_content_30k_002, long_content_30k_003, 80% of XML-6
-  - VAL: XML-5, long_content_30k_001, 20% of XML-6
+- **Splits (revised after M0.1 — XML-6 has no parent CSV, dropped from BP-supervised splits):**
+  - TRAIN: XML-1..4 (~129k events), long_content_30k_002 (~78k events), long_content_30k_003 (~44k events)
+  - VAL: XML-5 (~29k events), long_content_30k_001 (~1k events)
+  - MLM-only corpus (Phase 1 substrate, not for BP supervision): XML-6 plus all non-recombinant sequences from every other directory's FASTAs
   - TEST-SANTA: UnseenTestSet (touched only for final eval)
   - TEST-REAL: LANL CRF panel (touched only for final eval)
 - **Deliverable:** `splits/v2_split.json` listing exact file paths per split + an event count summary.
