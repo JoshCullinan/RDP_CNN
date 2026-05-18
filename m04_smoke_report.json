@@ -1,0 +1,13 @@
+{
+  "legacy_cache": "ds_UnseenTestSet_07e8e66de8d2a720.npz",
+  "n_checked": 50,
+  "matched_to_legacy": 50,
+  "not_in_legacy": 0,
+  "bit_identical": 50,
+  "mismatched": 0,
+  "total_onehot_cell_diffs": 0,
+  "max_diff_per_event_cells": 0,
+  "first_mismatches": [],
+  "legacy_ch15_21_abs_sum_per_event": Infinity,
+  "legacy_ch22_32_abs_mean_per_event": 0.3004172420501709
+}
