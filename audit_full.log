@@ -5,17 +5,17 @@ XML-2                            39,068     39,068        1.0
 XML-3                            38,921     38,921        1.0
 XML-4                            18,816     18,816        1.0
 XML-5                            28,959     28,959        1.0
-XML-6                                 0          0        0.0
+XML-6                            97,227      8,984       10.8
 long_content_30k_001             18,290      1,059       17.3
 long_content_30k_002          2,027,957     77,707       26.1
 long_content_30k_003          1,259,145     44,409       28.4
 UnseenTestSet                     5,539      5,539        1.0
 --------------------------------------------------------------
-TOTAL                         3,469,100    286,883
+TOTAL                         3,566,327    295,867
 
 Notes:
  - 'triplets' = TripletEvent yielded; what the cache will hold.
  - 'events'   = distinct RDPEvents (deduped over sibling recombinants).
  - 'avg/event'= sibling-recombinant multiplicity (long-content >> XML).
- - XML-6 has no parent CSV; its sequences are available for MLM
-   pretraining but no usable BP-localization triplets.
+ - XML-6 events come from pick_parents_rdp5ml.py (sim-csv mode);
+   re-run that script if .faParents.csv files are missing.
