@@ -1,0 +1,22 @@
+[XML-1] 1215 usable FASTAs
+  [XML-1] done — files=1215, events=32,405, recombs=26,963, alignments=542 MB
+[XML-2] 1110 usable FASTAs
+  [XML-2] done — files=1110, events=39,068, recombs=30,970, alignments=1177 MB
+[XML-3] 718 usable FASTAs
+  [XML-3] done — files=718, events=38,921, recombs=28,782, alignments=485 MB
+[XML-4] 1080 usable FASTAs
+  [XML-4] done — files=1080, events=18,816, recombs=16,026, alignments=2397 MB
+[XML-5] 1271 usable FASTAs
+  [XML-5] done — files=1271, events=28,959, recombs=24,478, alignments=1597 MB
+[XML-6] 900 usable FASTAs
+  [XML-6] done — files=900, events=97,227, recombs=30,358, alignments=450 MB
+[long_content_30k_001] 500 usable FASTAs
+  [long_content_30k_001] done — files=500, events=18,290, recombs=12,054, alignments=1742 MB
+[long_content_30k_002] 3999 usable FASTAs
+  [long_content_30k_002] done — files=3999, events=2,027,957, recombs=473,725, alignments=17938 MB
+[long_content_30k_003] 4000 usable FASTAs
+  [long_content_30k_003] done — files=4000, events=1,259,145, recombs=404,317, alignments=17938 MB
+[UnseenTestSet] 97 usable FASTAs
+  [UnseenTestSet] done — files=97, events=5,539, recombs=4,139, alignments=371 MB
+
+Total: files=14890, events=3,566,327, alignments=44.6 GB, elapsed=603s
