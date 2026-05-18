@@ -92,17 +92,24 @@ Test results (commit pending):
 
 Build wall time: 603 s (10 min) on the RTX-3070 box.
 
-#### M0.3 — Held-out split definition
+#### M0.3 — ✅ DONE 2026-05-18 — Held-out split definition
 
-- **Goal:** lock the train/val/test split before any model touches the data, to prevent leakage.
-- **Splits (revised after M0.1 — XML-6 unblocked via pick_parents and now contributes):**
-  - TRAIN: XML-1..4 (~129k events), 80% of XML-6 (~7,200 events at 10 kb), long_content_30k_002 (~78k events), long_content_30k_003 (~44k events)
-  - VAL: XML-5 (~29k events), 20% of XML-6 (~1,800 events at 10 kb), long_content_30k_001 (~1k events)
-  - MLM-only corpus (Phase 1 substrate, sequences not used for BP supervision): all non-recombinant sequences across every training/val FASTA
-  - TEST-SANTA: UnseenTestSet (touched only for final eval)
-  - TEST-REAL: LANL CRF panel (touched only for final eval)
-- **Deliverable:** `splits/v2_split.json` listing exact file paths per split + an event count summary.
-- **Success criterion:** every event in the cache is in exactly one split; XML-6 train/val files are deterministically chosen (sorted then hashed for a stable seed); TEST-SANTA and TEST-REAL files are never referenced from TRAIN or VAL.
+Artifacts: `build_splits_v2.py`, `splits/v2_split.json` (830 KB).
+
+| Split | Files | Triplets | Unique events | Composition |
+|---|---:|---:|---:|---|
+| TRAIN | 12,827 | 3,492,769 | 258,416 | XML-1..4 (4,123), long_content_30k_002 (3,999), long_content_30k_003 (4,000), XML-6 80% (705) |
+| VAL | 1,966 | 68,019 | 31,912 | XML-5 (1,271), long_content_30k_001 (500), XML-6 20% (195) |
+| TEST_SANTA | 97 | 5,539 | 5,539 | UnseenTestSet (untouched until final eval) |
+| TEST_REAL | 4 | — | — | LANL CRF panel (lives outside the v2 cache; untouched until final eval) |
+
+XML-6 split is deterministic: `sha256("v2-split|<filename>")[:8] / 2^64 < 0.80 → TRAIN`. Actual TRAIN/VAL ratio came out 705/195 = 78.3%/21.7% (hashes don't land exactly on 0.80; deterministic and reproducible). All four validation checks pass:
+1. Every cached event lands in exactly one split.
+2. No TEST file appears in TRAIN/VAL.
+3. No file appears in two splits.
+4. Total event coverage matches the cache total.
+
+MLM-only corpus (Phase 1 substrate): every non-recombinant sequence across all 14,793 TRAIN+VAL FASTAs is available via `cache.shards[d].sample_non_recombinant_ids()` and the `seq_flags.npy` `is_recombinant=0` mask. No separate split file needed; it's a function of the existing TRAIN/VAL FASTA membership.
 
 #### M0.4 — Baseline reproduction (sanity peg)
 

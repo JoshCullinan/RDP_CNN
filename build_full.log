@@ -19,4 +19,4 @@
 [UnseenTestSet] 97 usable FASTAs
   [UnseenTestSet] done — files=97, events=5,539, recombs=4,139, alignments=371 MB
 
-Total: files=14890, events=3,566,327, alignments=44.6 GB, elapsed=603s
+Total: files=14890, events=3,566,327, alignments=44.6 GB, elapsed=598s
