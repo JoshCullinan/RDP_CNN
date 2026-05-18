@@ -58,6 +58,9 @@ B2_MASK_LO, B2_MASK_HI = 15, 22
 # Variant (OH) one-hot-only: zero ALL derived signal channels (15..32). Tests
 # whether the CNN transfers to real-HIV from raw nucleotide one-hots alone.
 OH_MASK_LO, OH_MASK_HI = 15, 33
+# Variant (RC) RDP-channels only: zero the one-hot block (0..14). Inverse of
+# OH — tests whether one-hots add anything beyond classical-method signals.
+RC_MASK_LO, RC_MASK_HI = 0, 15
 
 # ---------------- Cache paths (run41 pooled split) ----------------------------
 CACHE_TRAIN = 'cache/ds_pool_run41_train_13767833f56c8d8d.npz'
@@ -192,6 +195,9 @@ def apply_variant_x(X, variant):
     elif variant == 'OH':
         print(f"  variant OH: zeroing X[..., {OH_MASK_LO}:{OH_MASK_HI}] in place", flush=True)
         X[:, :, OH_MASK_LO:OH_MASK_HI] = 0
+    elif variant == 'RC':
+        print(f"  variant RC: zeroing X[..., {RC_MASK_LO}:{RC_MASK_HI}] in place", flush=True)
+        X[:, :, RC_MASK_LO:RC_MASK_HI] = 0
     return X
 
 
@@ -204,7 +210,7 @@ def variant_dilations(variant):
 # ---------------- Main --------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--variant', required=True, choices=['B2', 'C', 'OH'])
+    ap.add_argument('--variant', required=True, choices=['B2', 'C', 'OH', 'RC'])
     ap.add_argument('--epochs', type=int, default=EPOCHS)
     ap.add_argument('--out-dir', default='models_test')
     ap.add_argument('--tag', default=None,
@@ -218,7 +224,8 @@ def main():
     args = ap.parse_args()
 
     default_tag = {'B2': 'runB2_no_rdp_channels', 'C': 'runC_extended_rf',
-                   'OH': 'runOH_one_hot_only'}[args.variant]
+                   'OH': 'runOH_one_hot_only',
+                   'RC': 'runRC_rdp_channels_only'}[args.variant]
     tag = args.tag if args.tag is not None else default_tag
     final_path = Path(args.out_dir) / f'cnn_breakpoint_{tag}_final.keras'
     best_path  = Path(args.out_dir) / f'cnn_breakpoint_{tag}_best.keras'
