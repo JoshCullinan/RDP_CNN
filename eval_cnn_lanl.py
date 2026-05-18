@@ -197,6 +197,9 @@ def main():
                          "RC = RDP-channels-only (channels 0-14 zeroed)")
     ap.add_argument('--threshold', type=float, default=THRESHOLD)
     ap.add_argument('--edge-buffer', type=int, default=EDGE_BUFFER)
+    ap.add_argument('--min-distance', type=int, default=TOLERANCE,
+                    help="find_peaks min_distance. Default = TOLERANCE (200). "
+                         "Lower this to disambiguate short-fragment BPs.")
     ap.add_argument('--out', default=str(OUT_JSON))
     args = ap.parse_args()
 
@@ -262,7 +265,7 @@ def main():
             if content_end > args.edge_buffer:
                 pred[content_end - args.edge_buffer: content_end] = 0.0
 
-        peaks, _ = find_peaks(pred, height=args.threshold, distance=TOLERANCE)
+        peaks, _ = find_peaks(pred, height=args.threshold, distance=args.min_distance)
         true_bps = truth.get(crf, [])
         tp, fp, fn, p, rcl, f = score(list(peaks), true_bps)
         agg_tp += tp; agg_fp += fp; agg_fn += fn
