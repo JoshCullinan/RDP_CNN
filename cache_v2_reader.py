@@ -128,9 +128,18 @@ class CacheV2Shard:
 
 
 class CacheV2:
-    """Federation of all shards under one cache root."""
+    """Federation of all shards under one cache root.
 
-    def __init__(self, cache_root: Path):
+    `cache_root` defaults to the same sibling-of-dataRaw location the
+    builder uses, so callers from inside worktrees pick up the persistent
+    cache without an explicit path.
+    """
+
+    def __init__(self, cache_root: Path | None = None):
+        if cache_root is None:
+            # Import here to avoid pulling Bio/pandas into reader-only callers.
+            from build_cache_v2 import CACHE_ROOT
+            cache_root = CACHE_ROOT
         self.root = Path(cache_root)
         with (self.root / "manifest.json").open() as f:
             self.manifest = json.load(f)

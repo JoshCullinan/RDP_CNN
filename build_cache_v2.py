@@ -52,7 +52,16 @@ from data_loader_v2 import (
 from Bio import SeqIO
 
 
-CACHE_ROOT = Path(__file__).resolve().parent / "cache" / "v2"
+def _discover_cache_root() -> Path:
+    """Place the cache as a sibling of dataRaw so it persists across worktrees.
+
+    The 42 GB cache should live at the repo's natural data root (alongside
+    dataRaw/), not inside a transient worktree under .claude/worktrees/.
+    """
+    return DATA_ROOT.parent / "cache" / "v2"
+
+
+CACHE_ROOT = _discover_cache_root()
 
 # Nucleotide encoding. Stored as int8.
 NT_TO_INT = {ord("A"): 0, ord("T"): 1, ord("G"): 2, ord("C"): 3, ord("-"): 4}
