@@ -55,6 +55,9 @@ PRIOR_POSITIVE = 0.01
 
 # Variant-specific channels-zero band for (B2): channels 15..21 inclusive.
 B2_MASK_LO, B2_MASK_HI = 15, 22
+# Variant (OH) one-hot-only: zero ALL derived signal channels (15..32). Tests
+# whether the CNN transfers to real-HIV from raw nucleotide one-hots alone.
+OH_MASK_LO, OH_MASK_HI = 15, 33
 
 # ---------------- Cache paths (run41 pooled split) ----------------------------
 CACHE_TRAIN = 'cache/ds_pool_run41_train_13767833f56c8d8d.npz'
@@ -181,10 +184,14 @@ def build_pipeline(X, y, w, training, dropout_rdp):
 def apply_variant_x(X, variant):
     """For B2: zero channels 15..21 IN-PLACE (the cache is mmap'd-fresh into
     memory by np.load; in-place is fine). The model never sees those channels.
-    For C: no-op."""
+    For OH: zero channels 15..32 (all derived signal channels) — tests pure
+    one-hot transfer. For C: no-op."""
     if variant == 'B2':
         print(f"  variant B2: zeroing X[..., {B2_MASK_LO}:{B2_MASK_HI}] in place", flush=True)
         X[:, :, B2_MASK_LO:B2_MASK_HI] = 0
+    elif variant == 'OH':
+        print(f"  variant OH: zeroing X[..., {OH_MASK_LO}:{OH_MASK_HI}] in place", flush=True)
+        X[:, :, OH_MASK_LO:OH_MASK_HI] = 0
     return X
 
 
@@ -197,7 +204,7 @@ def variant_dilations(variant):
 # ---------------- Main --------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--variant', required=True, choices=['B2', 'C'])
+    ap.add_argument('--variant', required=True, choices=['B2', 'C', 'OH'])
     ap.add_argument('--epochs', type=int, default=EPOCHS)
     ap.add_argument('--out-dir', default='models_test')
     ap.add_argument('--tag', default=None,
@@ -210,7 +217,8 @@ def main():
                     help='Path to val .npz cache (default: run41 1500-event cache).')
     args = ap.parse_args()
 
-    default_tag = {'B2': 'runB2_no_rdp_channels', 'C': 'runC_extended_rf'}[args.variant]
+    default_tag = {'B2': 'runB2_no_rdp_channels', 'C': 'runC_extended_rf',
+                   'OH': 'runOH_one_hot_only'}[args.variant]
     tag = args.tag if args.tag is not None else default_tag
     final_path = Path(args.out_dir) / f'cnn_breakpoint_{tag}_final.keras'
     best_path  = Path(args.out_dir) / f'cnn_breakpoint_{tag}_best.keras'

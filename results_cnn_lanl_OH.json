@@ -1,0 +1,112 @@
+{
+  "model": "models_test/cnn_breakpoint_runOH_one_hot_only_final.keras",
+  "threshold": 0.5,
+  "edge_buffer": 25,
+  "tolerance": 200,
+  "per_crf": {
+    "CRF01_AE": {
+      "skipped": true
+    },
+    "CRF02_AG": {
+      "truth_bps": [
+        789,
+        2155,
+        2625,
+        3274,
+        4174,
+        4874,
+        6224,
+        8311,
+        8588,
+        9089
+      ],
+      "pred_peaks": [
+        569,
+        9654
+      ],
+      "tp": 0,
+      "fp": 2,
+      "fn": 10,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "pred_time_s": 2.3466403484344482,
+      "content_end": 9719
+    },
+    "CRF07_BC": {
+      "truth_bps": [
+        1269,
+        1410,
+        2080,
+        2620,
+        3010,
+        3310,
+        5699,
+        6310,
+        8796,
+        9058
+      ],
+      "pred_peaks": [
+        574,
+        7532
+      ],
+      "tp": 0,
+      "fp": 2,
+      "fn": 10,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "pred_time_s": 0.06480836868286133,
+      "content_end": 9811
+    },
+    "CRF08_BC": {
+      "truth_bps": [
+        1440,
+        1630,
+        2852,
+        3170,
+        8802,
+        9010
+      ],
+      "pred_peaks": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 6,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "pred_time_s": 0.06374621391296387,
+      "content_end": 9719
+    },
+    "CRF12_BF": {
+      "truth_bps": [
+        951,
+        2640,
+        2981,
+        3025,
+        3688,
+        5945,
+        6209,
+        8482,
+        8660
+      ],
+      "pred_peaks": [],
+      "tp": 0,
+      "fp": 0,
+      "fn": 9,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "pred_time_s": 0.06258106231689453,
+      "content_end": 9719
+    }
+  },
+  "aggregate": {
+    "tp": 0,
+    "fp": 4,
+    "fn": 35,
+    "precision": 0.0,
+    "recall": 0.0,
+    "f1": 0.0
+  }
+}

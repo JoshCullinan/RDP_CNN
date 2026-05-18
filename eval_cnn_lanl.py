@@ -57,7 +57,8 @@ RDP_METHOD_NAMES = ('RDP', 'GENECONV', 'Bootscan', 'Maxchi', 'Chimaera',
 RUSTRDP_TO_CHANNEL = {
     'RDP': 0, 'Bootscan': 2, 'MaxChi': 3, 'Chimaera': 4, 'SiScan': 5,
 }
-B2_MASK_LO, B2_MASK_HI = 15, 22  # zero these at inference too
+B2_MASK_LO, B2_MASK_HI = 15, 22  # runB2 inference convention
+OH_MASK_LO, OH_MASK_HI = 15, 33  # runOH (one-hot-only) inference convention
 TOLERANCE = 200
 THRESHOLD = 0.7  # SUB-best at EB=25 per results_rustrdp_santa_subset (for runB2)
 EDGE_BUFFER = 25  # honest convention
@@ -121,14 +122,22 @@ def parse_rustrdp(out_csv):
     return dict(by_method)
 
 
-def encode_lanl_triplet(seqs, by_method):
+def encode_lanl_triplet(seqs, by_method, variant='B2'):
     """seqs: list of 3 SeqRecord (recomb, parent1, parent2) - alignment columns
-    in HXB2 coordinates. Returns X with shape (MAX_SEQ_LEN, 33)."""
+    in HXB2 coordinates. Returns X with shape (MAX_SEQ_LEN, 33).
+
+    variant='B2': zeros channels 15:22 (match/info/MaxChi), keeps 22-32 populated.
+    variant='OH': zeros channels 15:33 (everything except one-hots) — tests
+                  whether the model transfers without RDP-derived inputs.
+    """
     X = np.zeros((MAX_SEQ_LEN, N_INPUT_CHANNELS), dtype=np.float32)
     # 0..14: one-hot recomb / parent1 / parent2
     X[:, 0:5]  = one_hot(seqs[0].seq)
     X[:, 5:10] = one_hot(seqs[1].seq)
     X[:, 10:15] = one_hot(seqs[2].seq)
+    if variant == 'OH':
+        # Everything 15..32 stays zero; skip the RustRDP-derived feature work.
+        return X
     # 15..21: ZERO (runB2 convention)
     # X[:, 15:22] = 0  (already zero)
 
@@ -180,6 +189,9 @@ def score(pred_bps, true_bps, tol=TOLERANCE):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--model', default=MODEL_PATH)
+    ap.add_argument('--variant', choices=['B2', 'OH'], default='B2',
+                    help="B2 = runB2 inference (channels 22-32 from RustRDP); "
+                         "OH = one-hot-only (channels 15-32 zeroed)")
     ap.add_argument('--threshold', type=float, default=THRESHOLD)
     ap.add_argument('--edge-buffer', type=int, default=EDGE_BUFFER)
     ap.add_argument('--out', default=str(OUT_JSON))
@@ -218,16 +230,18 @@ def main():
             print(f"\n  {crf}: SKIP — expected 3 sequences, found {len(seqs)}")
             continue
 
-        # Run RustRDP for the channel-22..32 features
-        out_csv = TMP_DIR / f"{crf}_rdp.csv"
-        proc = run_rustrdp(fa, out_csv)
-        if proc.returncode != 0:
-            print(f"\n  {crf}: RustRDP FAIL: {proc.stderr[:200]}")
-            continue
-        by_method = parse_rustrdp(out_csv)
+        # Run RustRDP for the channel-22..32 features (only needed for B2)
+        by_method = {}
+        if args.variant == 'B2':
+            out_csv = TMP_DIR / f"{crf}_rdp.csv"
+            proc = run_rustrdp(fa, out_csv)
+            if proc.returncode != 0:
+                print(f"\n  {crf}: RustRDP FAIL: {proc.stderr[:200]}")
+                continue
+            by_method = parse_rustrdp(out_csv)
 
         # Encode + predict
-        X = encode_lanl_triplet(seqs, by_method)
+        X = encode_lanl_triplet(seqs, by_method, variant=args.variant)
         X_batch = X[None, :, :]
         t0 = time.time()
         y_pred = model.predict(X_batch, verbose=0)[0]  # (MAX_SEQ_LEN,)
