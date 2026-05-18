@@ -57,13 +57,40 @@ Key findings that change downstream milestones:
 - **XML-6 unblocked via `pick_parents_rdp5ml.py`** (sim-csv-only mode — RDP-style closest-relative inference per BP segment from `.faSimVSRealCompare.csv` alone, no SANTA logs needed). 900 files processed in 64 s, adding **8,984 unique events at 10 kb length** that fill the curriculum gap between 4 kb XML and 30 kb long_content. Script validated 6/8 exact agreement on XML-1 with logs hidden. Any future SANTA dump lacking `.faParents.csv` and `.faRecombIdentifyStats.csv` should be processed with that script first.
 - **Long-content sibling-recombinant multiplicity** (17–28×) means each unique BP configuration appears as many correlated training rows. M0.2 caches all rows so downstream code can choose; M3 should dedupe-by-event or downweight within-event correlation in batches to avoid effective-batch-size collapse.
 
-#### M0.2 — Sharded cache builder
+#### M0.2 — ✅ DONE 2026-05-18 — Sharded cache builder
 
-- **Goal:** one-time conversion of all loadable events into on-disk shards for fast training-time access.
-- **Format:** one shard per source dir, layout `(R_one_hot, P1_one_hot, P2_one_hot, parental_assignment_per_position, bp_position_list, original_len)` per event. fp8 or fp16 for one-hots (5-channel: A/T/G/C/-). Use HDF5 or `np.savez` with memmap.
-- **Expected size:** ~47 GB on disk total.
-- **Deliverable:** `build_cache_v2.py` + the actual shards under `cache/v2/{source_dir}/*.npz` (or `.h5`).
-- **Success criterion:** cache size on disk within 2× of estimate, random-access per-event read latency < 50 ms, and a round-trip test (cache → decode → re-encode) matches the original one-hot exactly for ≥10 randomly sampled events.
+Artifacts: `build_cache_v2.py`, `cache_v2_reader.py`, `test_cache_v2.py`, `build_full.log`. Cache itself at `cache/v2/` (gitignored, 42 GB).
+
+| Shard | Files | Events | Alignments size |
+|---|---:|---:|---:|
+| XML-1 | 1,215 | 32,405 | 542 MB |
+| XML-2 | 1,110 | 39,068 | 1,177 MB |
+| XML-3 | 718 | 38,921 | 485 MB |
+| XML-4 | 1,080 | 18,816 | 2,397 MB |
+| XML-5 | 1,271 | 28,959 | 1,597 MB |
+| XML-6 | 900 | 97,227 | 450 MB |
+| long_content_30k_001 | 500 | 18,290 | 1,742 MB |
+| long_content_30k_002 | 3,999 | 2,027,957 | 17,938 MB |
+| long_content_30k_003 | 4,000 | 1,259,145 | 17,938 MB |
+| UnseenTestSet | 97 | 5,539 | 371 MB |
+| **TOTAL** | **14,890** | **3,566,327** | **44.64 GB** raw / 42 GB on disk |
+
+Design departed from the master plan's per-event one-hot layout (would have been ~3 TB given the 17–28× sibling-recombinant multiplicity). Final layout per shard:
+- `alignments.bin` — int8 concatenation of all alignment matrices (A:0, T:1, G:2, C:3, gap:4). One byte per nucleotide.
+- `align_idx.npy` — structured array `(file_idx, n_seqs, seq_len, byte_offset)` per source FASTA.
+- `events.npy` — structured array `(file_idx, event_id, recomb_id, p1_id, p2_id, bp_start, bp_end)` per triplet event.
+- `seq_flags.npy` — `(file_idx, fasta_id, is_recombinant)` per sequence; supports MLM corpus sampling + no-BP negative-triplet sampling.
+- `files.txt` — filename per line, indexed by file_idx.
+
+Reader API (`cache_v2_reader.CacheV2`): memmap-backed, no decoding at read time. `get_triplet(idx)` returns int8 R/P1/P2 arrays + bp positions in ~10 µs. One-hot expansion is `np.eye(5)[arr]` at training time — ~1 ms per 30 kb sequence.
+
+Test results (commit pending):
+- Round-trip: 30/30 sequences from XML-1..4 byte-identical to the source FASTAs after canonicalising non-ATGC bases to gap (matches the encoder).
+- Invariants: 1,000 events checked — all satisfy `recomb_id ≠ p1_id ≠ p2_id` and `0 ≤ bp_start ≤ bp_end ≤ seq_len`.
+- Random-access latency: p50=0.01 ms, p99=0.02 ms over 200 random reads (vs 50 ms threshold — 2,500× headroom).
+- Seq-flag coverage: every recomb_id from `events.npy` correctly flagged in `seq_flags.npy`.
+
+Build wall time: 603 s (10 min) on the RTX-3070 box.
 
 #### M0.3 — Held-out split definition
 
