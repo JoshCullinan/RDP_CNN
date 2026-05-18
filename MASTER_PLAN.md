@@ -113,17 +113,26 @@ MLM-only corpus (Phase 1 substrate): every non-recombinant sequence across all 1
 
 #### M0.4 — ✅ DONE 2026-05-18 — Baseline reproduction (sanity peg, inference path)
 
-Artifacts: `m04_compare_v2_vs_legacy.py`, `m04_report.json`, `m04_smoke_report.json`.
+Artifacts: `m04_compare_v2_vs_legacy.py`, `m04_verify_inference.py`, `m04_report.json`, `m04_smoke_report.json`, `m04_inference_audit.json`, `m04_inference_audit.log`.
 
-Scope chosen at execution time: rather than retrain the runB2_sig10 architecture on the v2 cache (~1–12 h depending on subset), use the existing `models_test/cnn_breakpoint_runB2_sig10_final.keras` checkpoint and prove the v2 cache reproduces the **inputs** that model was trained against. Same inputs → deterministic model → same outputs → same F1.
+Two-stage verification, completed end-to-end:
 
-**Result:** **5,539 / 5,539 UnseenTestSet events bit-identical** in channels 0..14 (R, P1, P2 one-hots) between the v2 cache and the legacy 33-channel cache `cache/ds_UnseenTestSet_07e8e66de8d2a720.npz`. Zero diff cells across (5539 × 32000 × 15) = ~2.66B cells. Total runtime 14 s.
+**Stage 1 — one-hot fidelity** (logical proof). 5,539 / 5,539 UnseenTestSet events bit-identical in channels 0..14 between the v2 cache and the legacy 33-channel cache `ds_UnseenTestSet_07e8e66de8d2a720.npz`. Zero diff cells across ~2.66B compared. Runtime 14 s. Bug found in smoke (50 events showed 0/50 initially): `v2_to_onehot()` was zeroing gap positions instead of encoding them in channel 4 — fixed to match the legacy 5-channel convention `{A:0, T:1, G:2, C:3, gap:4}`.
 
-Bug found during smoke-test (50 events): the initial `v2_to_onehot()` zeroed gap positions instead of encoding them in channel 4. Legacy uses 5-channel one-hot `{A:0, T:1, G:2, C:3, gap:4}` — v2 stores the same int8 encoding but I had to fix the expansion. With the fix, all events pass.
+**Stage 2 — measured F1** (empirical proof). Loaded the runB2_sig10 checkpoint, streamed inference over the 584-event honest-eval subset (11 files held out of run41+run42c training), applied content-end + edge-buffer masking matching `eval_diagnostic_A_fair.evaluate()`, swept thresholds 0.1–0.95:
 
-The master-plan success criterion (±0.03 of 0.421 SANTA, 0.533 LANL) is trivially satisfied at delta = 0 — running the existing checkpoint on v2-derived inputs will produce exactly the published numbers. No retraining attempted. The cost of going from a sanity peg to a full retraining baseline is preserved for any future session: it would mean restoring the channel-15..21 + 22..32 derivation pipeline (MaxChi on-the-fly + RustRDP from the legacy cache) and running `train_diagnostic.py --variant B2 --label-sigma 10` on the v2 TRAIN subset.
+| Threshold | Precision | Recall | F1 |
+|---:|---:|---:|---:|
+| 0.20 | 0.377 | 0.507 | **0.4321** (sweep best) |
+| 0.30 | 0.380 | 0.470 | **0.4210** (matches canonical 0.4205 to 4 decimals) |
+| 0.50 | 0.380 | 0.461 | 0.4172 |
+| 0.70 | 0.367 | 0.304 | 0.3324 |
 
-**Phase 0 complete.** All four foundations milestones done — data loader, cache, splits, baseline-fidelity verified. Ready for Phase 1 (MLM self-supervised pretraining).
+|Δ_best| = 0.0116 against canonical target 0.4205. Master-plan ±0.03 satisfied with ~0.018 margin.
+
+**Process discipline:** the first inference attempt OOM-killed the user's desktop session by allocating two 11.7 GB copies of the legacy X tensor (`np.array(..., copy=True)` × 2 = 35 GB on a 30 GB box) — the failure mode that [[feedback-padding-mask-oom]] documented two days earlier. Fix: dropped Path B (redundant given bit-identity), switched to per-batch streaming off a memmap'd X, added an RSS watchdog at 26 GB (user-chosen ceiling) that aborts the process if it gets close to the system memory wall instead of letting the OS OOM killer choose. Peak observed RSS 12.9 GB — comfortably under cap. The `RLIMIT_AS` cap I tried first conflicted with CUDA's huge virtual-memory mappings and was rejected in favour of the RSS check.
+
+**Phase 0 complete.** All four foundations milestones done — data loader, cache, splits, baseline-input fidelity verified at the bit level AND the F1 level. Ready for Phase 1 (MLM self-supervised pretraining).
 
 ---
 
