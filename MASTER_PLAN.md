@@ -45,16 +45,16 @@ Artifacts: `data_loader_v2.py`, `test_data_loader_v2.py`, `audit_full.log` (comm
 | XML-3 | 38,921 | 38,921 | 1.0 |
 | XML-4 | 18,816 | 18,816 | 1.0 |
 | XML-5 | 28,959 | 28,959 | 1.0 |
-| XML-6 | 0 | 0 | — (no parent CSV) |
+| XML-6 | 97,227 | 8,984 | 10.8 |
 | long_content_30k_001 | 18,290 | 1,059 | 17.3 |
 | long_content_30k_002 | 2,027,957 | 77,707 | 26.1 |
 | long_content_30k_003 | 1,259,145 | 44,409 | 28.4 |
 | UnseenTestSet | 5,539 | 5,539 | 1.0 |
-| **TOTAL** | **3,469,100** | **286,883** | — |
+| **TOTAL** | **3,566,327** | **295,867** | — |
 
 Key findings that change downstream milestones:
-- Unique-event total 286,883 is ~9% below the prior estimate (315k); triplet-level total is 11× higher.
-- **XML-6 confirmed unusable for BP supervision** (no `.faParents.csv` or `.faRecombIdentifyStats.csv` on disk — SANTA-only dump, RDP5 never ran). Sequences still usable for MLM pretraining (Phase 1); cannot supply parent IDs for triplet training. The 80/20 XML-6 split in M0.3 should be reframed as "XML-6 → MLM-only corpus."
+- Unique-event total 295,867 is ~6% below the prior estimate (315k); triplet-level total is ~11× higher than unique events (sibling-recombinant inheritance dominates).
+- **XML-6 unblocked via `pick_parents_rdp5ml.py`** (sim-csv-only mode — RDP-style closest-relative inference per BP segment from `.faSimVSRealCompare.csv` alone, no SANTA logs needed). 900 files processed in 64 s, adding **8,984 unique events at 10 kb length** that fill the curriculum gap between 4 kb XML and 30 kb long_content. Script validated 6/8 exact agreement on XML-1 with logs hidden. Any future SANTA dump lacking `.faParents.csv` and `.faRecombIdentifyStats.csv` should be processed with that script first.
 - **Long-content sibling-recombinant multiplicity** (17–28×) means each unique BP configuration appears as many correlated training rows. M0.2 caches all rows so downstream code can choose; M3 should dedupe-by-event or downweight within-event correlation in batches to avoid effective-batch-size collapse.
 
 #### M0.2 — Sharded cache builder
@@ -68,10 +68,10 @@ Key findings that change downstream milestones:
 #### M0.3 — Held-out split definition
 
 - **Goal:** lock the train/val/test split before any model touches the data, to prevent leakage.
-- **Splits (revised after M0.1 — XML-6 has no parent CSV, dropped from BP-supervised splits):**
-  - TRAIN: XML-1..4 (~129k events), long_content_30k_002 (~78k events), long_content_30k_003 (~44k events)
-  - VAL: XML-5 (~29k events), long_content_30k_001 (~1k events)
-  - MLM-only corpus (Phase 1 substrate, not for BP supervision): XML-6 plus all non-recombinant sequences from every other directory's FASTAs
+- **Splits (revised after M0.1 — XML-6 unblocked via pick_parents and now contributes):**
+  - TRAIN: XML-1..4 (~129k events), 80% of XML-6 (~7,200 events at 10 kb), long_content_30k_002 (~78k events), long_content_30k_003 (~44k events)
+  - VAL: XML-5 (~29k events), 20% of XML-6 (~1,800 events at 10 kb), long_content_30k_001 (~1k events)
+  - MLM-only corpus (Phase 1 substrate, sequences not used for BP supervision): all non-recombinant sequences across every training/val FASTA
   - TEST-SANTA: UnseenTestSet (touched only for final eval)
   - TEST-REAL: LANL CRF panel (touched only for final eval)
 - **Deliverable:** `splits/v2_split.json` listing exact file paths per split + an event count summary.

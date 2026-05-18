@@ -10,7 +10,9 @@ Handles all three SANTA-derived FASTA schemas on disk:
   Schema B — new short (XML-6)
       *.fa
       *.faSimVSRealCompare.csv
-      (no parent CSV — events are unusable; loader skips them)
+      (no parent CSV out-of-the-box; run pick_parents_rdp5ml.py over the
+       directory to generate *.faParents.csv first — then the schema
+       collapses to schema C and the loader picks the events up.)
 
   Schema C — long-content (long_content_30k_001..003)
       *.fa
@@ -274,8 +276,8 @@ def _print_audit(max_files_per_dir: Optional[int] = None) -> None:
     print(" - 'triplets' = TripletEvent yielded; what the cache will hold.")
     print(" - 'events'   = distinct RDPEvents (deduped over sibling recombinants).")
     print(" - 'avg/event'= sibling-recombinant multiplicity (long-content >> XML).")
-    print(" - XML-6 has no parent CSV; its sequences are available for MLM")
-    print("   pretraining but no usable BP-localization triplets.")
+    print(" - XML-6 events come from pick_parents_rdp5ml.py (sim-csv mode);")
+    print("   re-run that script if .faParents.csv files are missing.")
 
 
 if __name__ == "__main__":
