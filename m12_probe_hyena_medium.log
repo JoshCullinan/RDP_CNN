@@ -1,0 +1,71 @@
+[09:41:43] device=cuda
+[09:41:50] loading AutoModelForCausalLM LongSafari/hyenadna-medium-160k-seqlen-hf
+[transformers] A new version of the following files was downloaded from https://huggingface.co/LongSafari/hyenadna-medium-160k-seqlen-hf:
+- modeling_hyena.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/212 [00:00<?, ?it/s]Loading weights: 100%|██████████| 212/212 [00:00<00:00, 12049.33it/s]
+  params: 6,554,624
+
+=== XML-5 — short (~4 kb) ===
+  sampled 30 sequences, avg_len=10783
+/home/joshc/Dev/RDP_CNN/m12_probe_hyena_medium.py:105: UserWarning: The given NumPy array is not writable, and PyTorch does not support non-writable tensors. This means writing to this tensor will result in undefined behavior. You may want to copy the array to protect its data or make it writable before converting it to a tensor. This type of warning will be suppressed for the rest of this program. (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:203.)
+  ids_np[i, :len(s)] = v2_to_hyena_ids(torch.from_numpy(s)).numpy()
+[transformers] `use_return_dict` is deprecated! Use `return_dict` instead!
+    [5/30]  8.9 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [10/30]  11.1 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [15/30]  12.0 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [20/30]  12.3 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [25/30]  12.7 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [30/30]  12.7 seq/s  RSS 1.4 GB  GPU peak 382 MB
+  next-token accuracy: 0.323 (n=323,460)
+    A: acc=0.632  (n=105,882)
+    C: acc=0.015  (n=62,557)
+    G: acc=0.317  (n=81,482)
+    T: acc=0.149  (n=71,865)
+    gap: acc=0.000  (n=1,674)
+    pos 0-25%: acc=0.319  (n=80,874)
+    pos 25-75%: acc=0.321  (n=161,733)
+    pos 75-100%: acc=0.329  (n=80,853)
+
+=== XML-6 — medium (~10 kb) ===
+  sampled 30 sequences, avg_len=10000
+    [5/30]  22.8 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [10/30]  22.8 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [15/30]  22.9 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [20/30]  23.0 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [25/30]  22.9 seq/s  RSS 1.4 GB  GPU peak 382 MB
+    [30/30]  22.9 seq/s  RSS 1.4 GB  GPU peak 382 MB
+  next-token accuracy: 0.285 (n=299,970)
+    A: acc=0.406  (n=83,026)
+    C: acc=0.030  (n=63,511)
+    G: acc=0.177  (n=67,633)
+    T: acc=0.442  (n=85,800)
+    gap: acc=0.000  (n=0)
+    pos 0-25%: acc=0.274  (n=75,000)
+    pos 25-75%: acc=0.288  (n=150,000)
+    pos 75-100%: acc=0.290  (n=74,970)
+
+=== long_content_30k_001 — long (~30 kb) ===
+  sampled 30 sequences, avg_len=29902
+    [5/30]  4.3 seq/s  RSS 1.4 GB  GPU peak 943 MB
+    [10/30]  4.3 seq/s  RSS 1.4 GB  GPU peak 943 MB
+    [15/30]  4.3 seq/s  RSS 1.4 GB  GPU peak 943 MB
+    [20/30]  4.3 seq/s  RSS 1.4 GB  GPU peak 943 MB
+    [25/30]  4.3 seq/s  RSS 1.4 GB  GPU peak 943 MB
+    [30/30]  4.3 seq/s  RSS 1.4 GB  GPU peak 943 MB
+  next-token accuracy: 0.325 (n=897,030)
+    A: acc=0.688  (n=319,728)
+    C: acc=0.007  (n=166,924)
+    G: acc=0.064  (n=177,583)
+    T: acc=0.255  (n=232,795)
+    gap: acc=0.000  (n=0)
+    pos 0-25%: acc=0.324  (n=224,280)
+    pos 25-75%: acc=0.325  (n=448,500)
+    pos 75-100%: acc=0.327  (n=224,250)
+
+Report saved to m12_probe_hyena_medium.json
+
+=== M1.2 medium-variant zero-shot probe summary ===
+mean accuracy: 0.311
+(small-32k baseline: 0.308)

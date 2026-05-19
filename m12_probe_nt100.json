@@ -1,0 +1,93 @@
+{
+  "hf_name": "InstaDeepAI/nucleotide-transformer-v2-100m-multi-species",
+  "n_params": 97889132,
+  "seed": 0,
+  "n_per_scale": 30,
+  "chunk_bp": 6000,
+  "mask_rate": 0.15,
+  "batch": 4,
+  "scales": {
+    "XML-5": {
+      "label": "short (~10 kb)",
+      "avg_len": 10783,
+      "n_sequences": 30,
+      "n_chunks": 60,
+      "n_tokens_masked": 8013,
+      "mlm_token_accuracy": 0.0017471608635966553,
+      "nucleotide_level_accuracy": 0.31749474237644587,
+      "per_bucket": {
+        "0-25%": {
+          "n": 2039,
+          "correct": 6,
+          "acc": 0.0029426189308484553
+        },
+        "25-75%": {
+          "n": 3939,
+          "correct": 4,
+          "acc": 0.0010154861640010156
+        },
+        "75-100%": {
+          "n": 2035,
+          "correct": 4,
+          "acc": 0.0019656019656019656
+        }
+      }
+    },
+    "XML-6": {
+      "label": "medium (~10 kb)",
+      "avg_len": 10000,
+      "n_sequences": 30,
+      "n_chunks": 60,
+      "n_tokens_masked": 7500,
+      "mlm_token_accuracy": 0.0013333333333333333,
+      "nucleotide_level_accuracy": 0.29702508004268946,
+      "per_bucket": {
+        "0-25%": {
+          "n": 1901,
+          "correct": 1,
+          "acc": 0.0005260389268805891
+        },
+        "25-75%": {
+          "n": 3761,
+          "correct": 5,
+          "acc": 0.0013294336612603031
+        },
+        "75-100%": {
+          "n": 1838,
+          "correct": 4,
+          "acc": 0.002176278563656148
+        }
+      }
+    },
+    "long_content_30k_001": {
+      "label": "long (~30 kb)",
+      "avg_len": 29902,
+      "n_sequences": 30,
+      "n_chunks": 150,
+      "n_tokens_masked": 22410,
+      "mlm_token_accuracy": 0.002365015618027666,
+      "nucleotide_level_accuracy": 0.337596155276823,
+      "per_bucket": {
+        "0-25%": {
+          "n": 5604,
+          "correct": 18,
+          "acc": 0.0032119914346895075
+        },
+        "25-75%": {
+          "n": 11161,
+          "correct": 20,
+          "acc": 0.0017919541259743751
+        },
+        "75-100%": {
+          "n": 5645,
+          "correct": 15,
+          "acc": 0.002657218777679362
+        }
+      }
+    }
+  },
+  "overall_mlm_token_accuracy_mean": 0.0018151699383192183,
+  "overall_nucleotide_accuracy_mean": 0.3173719925653194,
+  "wall_time_sec": 15.06732964515686,
+  "peak_gpu_memory_gb": 1.0641608238220215
+}
