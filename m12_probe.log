@@ -1,0 +1,59 @@
+[07:25:11] device=cuda
+[07:25:17] loading AutoModelForCausalLM LongSafari/hyenadna-small-32k-seqlen-hf
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/108 [00:00<?, ?it/s]Loading weights: 100%|██████████| 108/108 [00:00<00:00, 11819.87it/s]
+  params: 3,281,664
+
+=== XML-5 — short (~4 kb) ===
+  sampled 30 sequences, avg_len=10783
+/home/joshc/Dev/RDP_CNN/.claude/worktrees/m1.2-probe/m12_zeroshot_probe.py:111: UserWarning: The given NumPy array is not writable, and PyTorch does not support non-writable tensors. This means writing to this tensor will result in undefined behavior. You may want to copy the array to protect its data or make it writable before converting it to a tensor. This type of warning will be suppressed for the rest of this program. (Triggered internally at /pytorch/torch/csrc/utils/tensor_numpy.cpp:203.)
+  ids_np[i, :len(s)] = v2_to_hyena_ids(torch.from_numpy(s)).numpy()
+[transformers] `use_return_dict` is deprecated! Use `return_dict` instead!
+    [10/30]  19.4 seq/s  RSS 1.4 GB
+    [20/30]  23.5 seq/s  RSS 1.4 GB
+    [30/30]  26.0 seq/s  RSS 1.4 GB
+  next-token accuracy: 0.318 (n=323,460)
+    A: acc=0.593  (n=105,882)
+    C: acc=0.025  (n=62,557)
+    G: acc=0.335  (n=81,482)
+    T: acc=0.156  (n=71,865)
+    gap: acc=0.000  (n=1,674)
+    pos 0-25%: acc=0.316  (n=80,874)
+    pos 25-75%: acc=0.316  (n=161,733)
+    pos 75-100%: acc=0.323  (n=80,853)
+
+=== XML-6 — medium (~10 kb) ===
+  sampled 30 sequences, avg_len=10000
+    [10/30]  47.7 seq/s  RSS 1.4 GB
+    [20/30]  52.8 seq/s  RSS 1.4 GB
+    [30/30]  54.5 seq/s  RSS 1.4 GB
+  next-token accuracy: 0.285 (n=299,970)
+    A: acc=0.382  (n=83,026)
+    C: acc=0.052  (n=63,511)
+    G: acc=0.173  (n=67,633)
+    T: acc=0.452  (n=85,800)
+    gap: acc=0.000  (n=0)
+    pos 0-25%: acc=0.273  (n=75,000)
+    pos 25-75%: acc=0.287  (n=150,000)
+    pos 75-100%: acc=0.291  (n=74,970)
+
+=== long_content_30k_001 — long (~30 kb) ===
+  sampled 30 sequences, avg_len=29902
+    [10/30]  10.2 seq/s  RSS 1.4 GB
+    [20/30]  10.3 seq/s  RSS 1.4 GB
+    [30/30]  10.3 seq/s  RSS 1.4 GB
+  next-token accuracy: 0.323 (n=897,030)
+    A: acc=0.659  (n=319,728)
+    C: acc=0.017  (n=166,924)
+    G: acc=0.055  (n=177,583)
+    T: acc=0.283  (n=232,795)
+    gap: acc=0.000  (n=0)
+    pos 0-25%: acc=0.323  (n=224,280)
+    pos 25-75%: acc=0.323  (n=448,500)
+    pos 75-100%: acc=0.322  (n=224,250)
+
+Report saved to m12_zeroshot_probe.json
+
+=== M1.2 zero-shot probe summary ===
+mean accuracy: 0.308
+DECISION: partial transfer → M1.2 needs MLM training but may converge faster than expected (warm-start the encoder).

@@ -168,13 +168,34 @@ New dependencies installed in `.venv/`:
 - `kernels==0.14.1` (HF prebuilt-kernel helper; pulled in but Mamba kernels not on the Hub)
 - `mambapy==1.2.0` (alternative Mamba backend; tried, same slow path — leaving installed in case useful later)
 
+#### M1.2-pre — ✅ DONE 2026-05-19 — Zero-shot transfer probe
+
+Artifacts: `m12_zeroshot_probe.py`, `m12_zeroshot_probe.json`, `m12_probe.log`.
+
+Quick precursor before committing to a 10-day MLM pretraining run: how much of HyenaDNA-small's human-genome causal-LM pretraining transfers to SANTA-simulated HIV sequences? Result:
+
+| VAL scale | n positions | Mean acc | A | C | G | T |
+|---|---:|---:|---:|---:|---:|---:|
+| XML-5 (~10 kb sampled) | 323,460 | 0.318 | 0.59 | 0.03 | 0.34 | 0.16 |
+| XML-6 (10 kb) | 299,970 | 0.285 | 0.38 | 0.05 | 0.17 | 0.45 |
+| long_content_30k_001 (30 kb) | 897,030 | 0.323 | 0.66 | 0.02 | 0.06 | 0.28 |
+| **mean** | | **0.308** | | | | |
+
+Two diagnostic signals confirm this is NOT meaningful transfer:
+1. **Heavy A-bias:** A accuracy ~0.66 on long_content, C accuracy 0.02. The model is mostly emitting "A" and getting some right because SANTA HIV is AT-rich.
+2. **Position-bucket accuracy flat at ~0.32** across 0-25%, 25-75%, 75-100% of the sequence. If the model were using context, late-position accuracy would dominate early. Flatness means no context use.
+
+0.308 ≈ majority-class baseline (~0.30 for AT-rich HIV). Per the decision rubric in the script: **partial transfer, run M1.2 from-scratch (or warm-started) MLM as originally planned.** HyenaDNA's pretrained weights are slightly-better-than-random initialization, not a meaningful shortcut.
+
 #### M1.2 — MLM training loop
 
 - **Goal:** train the backbone via masked nucleotide modelling on all sequences (recombinants and non-recombinants alike) across the training splits.
 - **Setup:** 15% of positions masked, 5-way CE on the recovered tokens. Length-bucketed batching at {4k, 10k, 30k}. Adam at LR 1e-4 with linear warmup + cosine decay. Mixed-precision fp16. Checkpoint per epoch.
-- **Deliverable:** `pretrain_mlm.py` + a trained checkpoint `models_test/backbone_mlm_v1.keras` + a curves file `models_test/history_mlm_v1.json`.
-- **Success criterion (Gate G1):** MLM val loss converges (plateau over the last 3 epochs); reconstruction accuracy ≥ 0.6 on validation (uniform baseline ≈ 0.2; "predict majority class" baseline ≈ 0.3 on AT-rich HIV).
+- **Deliverable:** `pretrain_mlm.py` + a trained checkpoint `models_test/backbone_mlm_v1.pt` + a curves file `models_test/history_mlm_v1.json`.
+- **Success criterion (Gate G1):** MLM val loss converges (plateau over the last 3 epochs); reconstruction accuracy ≥ 0.6 on validation (uniform baseline ≈ 0.2; "predict majority class" baseline ≈ 0.3 on AT-rich HIV; HyenaDNA zero-shot baseline 0.308, measured M1.2-pre).
 - **Curriculum:** epochs 1–3 on 4 kb (XML-1..5) only, then expand. Don't start on 30 kb from cold init — it won't converge.
+- **Warm-start vs random init:** initialize from HyenaDNA-small-32k weights (loaded via AutoModelForMaskedLM if available, else AutoModelForCausalLM + new MLM head). Better than random but not by much per the probe.
+- **Implementation note:** PyTorch backbone now, deliverable is `.pt` not `.keras`. See [[project-framework-switch-pytorch-hyenadna]].
 
 #### M1.3 — Pretraining checkpoint card
 
