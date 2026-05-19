@@ -1,0 +1,50 @@
+[17:03:34] loading existing data from m14_realism_measures.partial.json
+  existing santa_alignments: 110
+  shards already done: {'XML-2', 'XML-1', 'XML-4', 'XML-3'}
+
+[17:03:34] loading real panels (for k-mer profiles)
+  zika: align shape (8, 10810)
+  sarscov2_full: align shape (8, 29903)
+
+[17:03:41] processing targets...
+
+=== XML-5 (n=20, panel=zika) ===
+/home/joshc/Dev/RDP_CNN/.venv/lib/python3.12/site-packages/torch/cuda/__init__.py:734: UserWarning: Can't initialize NVML
+  warnings.warn("Can't initialize NVML")
+  [hyena] loading on cuda...
+Loading weights:   0%|          | 0/108 [00:00<?, ?it/s]Loading weights: 100%|██████████| 108/108 [00:00<00:00, 13291.81it/s]
+  [hyena] params: 3,281,664
+[transformers] `use_return_dict` is deprecated! Use `return_dict` instead!
+  [5/20] hamming=0.129 6mer_jsd=0.064 hyena=0.314 dt=0.2s
+  [10/20] hamming=0.113 6mer_jsd=0.057 hyena=0.315 dt=0.2s
+  [15/20] hamming=0.114 6mer_jsd=0.056 hyena=0.321 dt=0.2s
+  [20/20] hamming=0.218 6mer_jsd=0.092 hyena=0.316 dt=0.3s
+
+=== long_content_30k_001 (n=7, panel=sarscov2_full) ===
+  [5/7] hamming=0.009 6mer_jsd=0.130 hyena=0.354 dt=0.1s
+  [7/7] hamming=0.029 6mer_jsd=0.125 hyena=0.292 dt=0.2s
+
+=== long_content_30k_002 (n=7, panel=sarscov2_full) ===
+  [5/7] hamming=0.020 6mer_jsd=0.119 hyena=0.304 dt=0.2s
+  [7/7] hamming=0.014 6mer_jsd=0.119 hyena=0.298 dt=0.2s
+
+=== long_content_30k_003 (n=6, panel=sarscov2_full) ===
+  [5/6] hamming=0.170 6mer_jsd=0.111 hyena=0.300 dt=0.2s
+  [6/6] hamming=0.159 6mer_jsd=0.110 hyena=0.298 dt=0.2s
+
+[17:03:54] composing summary_per_xml
+
+[17:03:54] wrote /home/joshc/Dev/RDP_CNN/m14_realism_measures.json
+  total santa_alignments: 150
+  by_xml: {'XML-1': 50, 'XML-2': 20, 'XML-3': 20, 'XML-4': 20, 'XML-5': 20, 'long_content_30k_001': 7, 'long_content_30k_002': 7, 'long_content_30k_003': 6}
+  elapsed: 20s
+
+=== summary_per_xml ===
+  XML-1: n=50  ham_med=0.282 jsd_med=0.317 hyena_med=0.283
+  XML-2: n=20  ham_med=0.242 jsd_med=0.075 hyena_med=0.382
+  XML-3: n=20  ham_med=0.270 jsd_med=0.215 hyena_med=0.295
+  XML-4: n=20  ham_med=0.112 jsd_med=0.048 hyena_med=0.273
+  XML-5: n=20  ham_med=0.190 jsd_med=0.069 hyena_med=0.319
+  long_content_30k_001: n=7  ham_med=0.014 jsd_med=0.125 hyena_med=0.338
+  long_content_30k_002: n=7  ham_med=0.023 jsd_med=0.119 hyena_med=0.302
+  long_content_30k_003: n=6  ham_med=0.167 jsd_med=0.118 hyena_med=0.274
