@@ -1,0 +1,66 @@
+{
+  "filter_source": "m14_realism_measures.json",
+  "rules": "Whole-shard drops: XML-1 (Spike), XML-3 (ORF1ab), long_content_30k_003. Per-combo: XML-4 keep mut>=0.01; XML-5 keep mut==0.005; long_content_30k_002 drop rp>=0.10.",
+  "shards_dropped_wholesale": [
+    "XML-1",
+    "XML-3",
+    "long_content_30k_003"
+  ],
+  "drop_counts": {
+    "TRAIN": {
+      "XML-1": 1215,
+      "XML-3": 718,
+      "XML-4": 360,
+      "long_content_30k_002": 1999,
+      "long_content_30k_003": 4000
+    },
+    "VAL": {
+      "XML-5": 843
+    }
+  },
+  "keep_counts": {
+    "TRAIN": {
+      "XML-2": 1110,
+      "XML-4": 720,
+      "long_content_30k_002": 2000,
+      "XML-6": 705
+    },
+    "VAL": {
+      "XML-5": 428,
+      "long_content_30k_001": 500,
+      "XML-6": 195
+    },
+    "TEST_SANTA": {
+      "UnseenTestSet": 97
+    },
+    "TEST_REAL": {
+      "lanl_crf": 4
+    }
+  },
+  "totals_by_split": {
+    "TRAIN": {
+      "files": 4535,
+      "events": 97565,
+      "triplets": 1142301,
+      "files_dropped": 8292
+    },
+    "VAL": {
+      "files": 1123,
+      "events": 12705,
+      "triplets": 48812,
+      "files_dropped": 843
+    },
+    "TEST_SANTA": {
+      "files": 97,
+      "events": 5539,
+      "triplets": 5539,
+      "files_dropped": 0
+    },
+    "TEST_REAL": {
+      "files": 4,
+      "events": 0,
+      "triplets": 0,
+      "files_dropped": 0
+    }
+  }
+}

@@ -134,6 +134,38 @@ Two-stage verification, completed end-to-end:
 
 **Phase 0 complete.** All four foundations milestones done — data loader, cache, splits, baseline-input fidelity verified at the bit level AND the F1 level. Ready for Phase 1 (MLM self-supervised pretraining).
 
+#### M0.5 — ✅ DONE 2026-05-19 — Data-realism filter (added after Phase 0)
+
+Artifacts: `m14_realism_measures.py`, `m14_realism_measures.json`, `build_filtered_split.py`, `splits/v2_filtered_split.json`, `splits/v2_filter_report.json`.
+
+Investigation triggered by the M1.2 zero-shot probe finding (mean acc 0.308 across three pretrained DNA models) and a follow-on question: how realistic is SANTA's training data vs real recombinant viral panels?
+
+**Real-virus reference panels acquired** (`data/real_recombinants/`): Ebola (8 seqs spanning 5 species), Zika (8 seqs, African + Asian lineages), SARS-CoV-2 full (8 seqs incl. XBB.1.5 recombinant + parents BA.2.10 + BJ.1), SARS-CoV-2 Spike + ORF1ab fragments. HIV-1 panel reused from existing LANL CRF triplets. 1.6 MB total, fetched via NCBI Entrez + MAFFT in 46 s.
+
+**6 measures computed across 150 SANTA alignments + 6 real panels:** pairwise Hamming distribution, 6-mer JSD vs nearest real panel, BP geometry, conservation pattern vs declared `<purifyingFitness>` sites, HyenaDNA-small next-token accuracy, RustRDP min p-value.
+
+**Key finding — SANTA's evolution-from-seed paradigm matches some real-virus alignment types and mismatches others:**
+
+| Real-virus type | Example | Real Hamming | SANTA match? |
+|---|---|---:|---|
+| Subtype/species-level divergence | HIV CRFs, Ebola species | 0.33–0.38 | ✅ matches naturally |
+| Recent-lineage panels | SARS-CoV-2 XBB/BA.2/Alpha | 0.002–0.007 | ❌ 50–270× too diverse |
+
+SANTA's within-host/short-timescale-evolution paradigm is the wrong shape for "compare-recent-lineages" tasks. No parameter combination rescues it for SARS-CoV-2 lineages.
+
+**Filter applied (aggressive):**
+- **Whole-shard drops** (paradigm mismatch): XML-1 (Spike), XML-3 (ORF1ab), long_content_30k_003 (high-mutation SARS-CoV-2). These produced Hamming 50–270× higher than real SARS-CoV-2 lineage panels.
+- **Parameter-level filters** on retained shards: XML-4 keep `mut≥0.01` (low-mut produced too-tight Ebola sims); XML-5 keep `mut=0.005` (high-mut too diverse for Zika); long_content_30k_002 drop `rp≥0.10`. XML-2 (HIV) kept as-is.
+
+| Split | Files (before → after) | Triplets (before → after) |
+|---|---:|---:|
+| TRAIN | 12,827 → 4,535 | 3,492,769 → ~1,142,301 |
+| VAL | 1,966 → 1,123 | 68,019 → ~48,812 |
+| TEST_SANTA | 97 → 97 | 5,539 → 5,539 |
+| TEST_REAL | 4 → 4 | — |
+
+**Strategic implication:** the SARS-CoV-2 deployment scenario remains the most challenging for any sequence-only model trained on SANTA. SANTA's strength is subtype-level divergence (HIV CRFs, Ebola species) which is exactly what runB2_sig10's RustRDP-channel scaffold leverages. If the deployment target is recent SARS-CoV-2 lineages (XBB-style), more work on data generation may be needed — perhaps SANTA tuned with shorter generation counts + lower mutation rates, or a different simulator entirely.
+
 ---
 
 ### Phase 1 — Self-supervised pretraining
