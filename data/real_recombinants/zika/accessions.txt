@@ -1,0 +1,10 @@
+# Panel: zika
+# Fetched 8 sequences, missing 0
+NC_012532	African_MR766	10794
+KU955591	African_Dakar_1968	10806
+KU312312	Asian_PRVABC59_PR_2015	10374
+KJ776791	Asian_FrPolynesia_2013	10807
+KU321639	Asian_Brazil_2015	10676
+KU501215	Asian_Honduras_2016	10675
+KX087101	Asian_Cambodia_2010	10778
+KU963573	Asian_Thailand_2014	10787

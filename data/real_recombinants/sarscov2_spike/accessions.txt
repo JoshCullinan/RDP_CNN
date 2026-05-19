@@ -1,0 +1,11 @@
+# Sliced from sarscov2_full/aligned.fa columns where Wuhan_Hu_1_ref maps to NC_045512[21563-25384] (Spike, 3822 bp expected, kept=3822)
+# Panel: sarscov2_full
+# Fetched 8 sequences, missing 0
+NC_045512	Wuhan_Hu_1_ref	29903
+OQ689539	XBB_1_5_recombinant	29738
+OP412163	BA_2_10_XBB_parent	29718
+OP412164	BJ_1_XBB_parent	29718
+MZ344997	Alpha_B_1_1_7	29694
+MZ359841	Delta_B_1_617_2	29789
+OM617939	Omicron_BA_5	29724
+OM061695	Omicron_BA_2	29858

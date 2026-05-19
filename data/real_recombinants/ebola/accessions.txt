@@ -1,0 +1,10 @@
+# Panel: ebola
+# Fetched 8 sequences, missing 0
+NC_002549	Zaire_Mayinga_76	18959
+AF086833	Zaire_Kikwit_95	18959
+KM034562	Zaire_Makona_2014	18957
+AY729654	Sudan_Boniface_76	18875
+FJ217161	Bundibugyo_Uganda_2007	18940
+FJ217162	TaiForest_CIv_1994	18935
+AF522874	Reston_1989	18891
+MK340750	Bombali_2016	19025
