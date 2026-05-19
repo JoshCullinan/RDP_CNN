@@ -2,9 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Current direction (May 2026) — read this first
+
+The project pivoted **away from the Keras dilated-CNN** to a PyTorch + HyenaDNA
+sequence-only backbone, aimed at multi-virus transfer (not HIV-only).
+
+- **Active plan:** [`MASTER_PLAN.md`](MASTER_PLAN.md). M0.1–M0.5, M1.1, M1.2-pre complete; **M1.2 (MLM training loop) is next.**
+- **Active handover:** [`HANDOVER_NEXT_AGENT.md`](HANDOVER_NEXT_AGENT.md).
+- **Active backbone:** `backbone_hyenadna.py` (HyenaDNA-small-32k, PyTorch 2.6 + transformers 5.8). `backbone_mamba.py` is a record of an abandoned attempt — don't revive without system `nvcc`.
+- **Active data:** `splits/v2_filtered_split.json` (the realism-filtered split; whole-shard drops of XML-1, XML-3, long_content_30k_003 + per-combo trims). Cache is `cache/v2/` via `cache_v2_reader.CacheV2`. **Do not train on `splits/v2_split.json` going forward.**
+- **Active deployment baseline (legacy):** `models_test/cnn_breakpoint_runB2_sig10_*.keras` — LANL agg F1 0.533. The HyenaDNA work must beat this.
+- **OOM rule (non-negotiable):** never `np.array(X, copy=True)` or `X.astype(...)` on multi-GB cached tensors. Use the RSS-watchdog pattern from `m12_zeroshot_probe.py`. See `feedback_padding_mask_oom.md` in memory.
+
+Pre-pivot context (the original task framing, cell IDs, iteration discipline, and the legacy Keras CNN pipeline) is preserved below for reference. Older one-shot handovers live in [`docs/handovers/archive/`](docs/handovers/archive/); pre-pivot idea/TODO queues in [`docs/archive/`](docs/archive/) — those are historical, **do not act on their recommendations.**
+
+---
+
+## Legacy pipeline (reference)
+
 ## What this is
 
-ML research project for detecting **viral recombination breakpoints** in aligned nucleotide sequences. Inputs are triplets `(recombinant, parent1, parent2)` produced by the SANTA simulator; outputs are per-position breakpoint probabilities. The work is delivered as Jupyter notebooks, not a Python package — there is no CLI, no test suite, no build step. Training and evaluation live in `CNN.ipynb`.
+ML research project for detecting **viral recombination breakpoints** in aligned nucleotide sequences. Inputs are triplets `(recombinant, parent1, parent2)` produced by the SANTA simulator; outputs are per-position breakpoint probabilities. The work was originally delivered as Jupyter notebooks; the active backbone work is now in PyTorch scripts (`backbone_hyenadna.py`, `m12_*.py`). Training and evaluation for the legacy CNN live in `CNN.ipynb`.
 
 ## Project goal
 
@@ -16,11 +34,13 @@ Key implications of the goal that shape what's worth trying:
 - **Triplet input is the current simplification, not the long-term contract.** The current model is given the recombinant's identity (via `ActualRecomb` in the SANTA CSVs) and only has to localise breakpoints. The eventual goal is a model that takes three sequences and decides *which* (if any) is the recombinant — a possible future framing is a four-way head over `{seq1, seq2, seq3, none}`. Treat the current "breakpoints in a known recombinant" task as a stepping stone.
 - **`RDPML.ipynb` and `RDPML_PSNN.ipynb` are referenced in `Autoencoder.ipynb` but live elsewhere.** They solve a different problem (classifiers trained on signals derived from existing detection methods); they are not baselines for what's being built here. Do not conflate them.
 
-## Read these first
+## Read these first (legacy CNN context only)
 
-- [HANDOVER.md](HANDOVER.md) — if you are an autonomous agent that has been delegated to iterate on this model without further human input, read this **first**. It has the iteration loop, experiment-logging protocol, decision criteria, and stop conditions.
-- [TODO.md](TODO.md) — canonical log of architectural decisions and the prioritised queue of next changes. Read this before proposing changes; many obvious-looking improvements have already been tried, and the failure modes are documented.
-- The **Experiment Log** markdown cell at the end of [CNN.ipynb](CNN.ipynb) — every prior run's hypothesis, configuration, headline numbers, and verdict. The most recent entry is the baseline you are improving on.
+- The **Experiment Log** markdown cell at the end of [CNN.ipynb](CNN.ipynb) — every prior run's hypothesis, configuration, headline numbers, and verdict. The most recent entry is the legacy CNN baseline (runB2_sig10).
+- [`docs/handovers/archive/HANDOVER.md`](docs/handovers/archive/HANDOVER.md) — original autonomous-iteration handover, kept for historical context.
+- [`docs/archive/TODO.md`](docs/archive/TODO.md) — pre-pivot architectural decisions log.
+
+**For current work, read [`HANDOVER_NEXT_AGENT.md`](HANDOVER_NEXT_AGENT.md) and [`MASTER_PLAN.md`](MASTER_PLAN.md) instead.**
 
 ## Environment
 
