@@ -1,0 +1,157 @@
+<santa xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+ xsi:noNamespaceSchemaLocation="santa.xsd">
+	<replicates>1</replicates>
+
+	<simulation>
+		<genome>
+		    <length>29902</length>
+			<sequences file = 'sarbecoStart.fa'/>
+			<feature>
+				<name>ORF1ab1</name>
+				<type>nucleotide</type>
+				<coordinates>265-13477</coordinates>
+			</feature>
+			<feature>
+				<name>ORF1ab2</name>
+				<type>nucleotide</type>
+				<coordinates>13482-21552</coordinates>
+			</feature>
+			<feature>
+				<name>S</name>
+				<type>nucleotide</type>
+				<coordinates>21562-25380</coordinates>
+			</feature>			
+		</genome>
+
+		<population>
+		    <populationSize>3000</populationSize>
+		    <inoculum>all</inoculum>
+		</population>
+
+		<fitnessFunction>			
+			<!-- Spike sites under strong negative selection -->
+		    <purifyingFitness>
+			    <feature>S</feature>
+		        <sites>1044-1047, 2007-2010, 2043-2046, 2385-2388, 2559-2602, 2670-2673, 2763-2766, 2946-2949, 3132-3135, 3300-3303</sites>
+		        <rank>
+		        	<order>observed</order>
+		            <breakTies>random</breakTies>
+		        </rank>
+		        <fitness>
+		            <lowFitness>0.8</lowFitness>
+			        <minimumFitness>0.1</minimumFitness>
+		        </fitness>
+		    </purifyingFitness>
+		    <!-- Positive selection on certain sites in orf1ab1 -->
+		    <!-- This is done by fluctuating which AAs are considered fit -->
+		    <purifyingFitness>
+			    <feature>ORF1ab1</feature>
+		        <sites>1134-1137, 1284-1287, 1581-1584, 2217-2220, 6816-6819, 6975-6978,
+		         7035-7038</sites>
+		        <rank>
+		        	<order>observed</order>
+		            <breakTies>random</breakTies>
+		        </rank>
+		        <fitness>
+		            <lowFitness>0.8</lowFitness>
+			        <minimumFitness>0.4</minimumFitness>
+		        </fitness>
+		        <fluctuate>
+					<rate>0.00001</rate>
+					<fitnessLimit>0</fitnessLimit>
+				</fluctuate>
+		    </purifyingFitness>
+		    <!-- Positive selection on certain sites in orf1ab2 -->
+		    <!-- This is done by fluctuating which AAs are considered fit -->
+		    <purifyingFitness>
+			    <feature>ORF1ab2</feature>
+		        <sites>39-42, 933-936, 1896-1899</sites>
+		        <rank>
+		        	<order>observed</order>
+		            <breakTies>random</breakTies>
+		        </rank>
+		        <fitness>
+		            <lowFitness>0.8</lowFitness>
+			        <minimumFitness>0.4</minimumFitness>
+		        </fitness>
+		        <fluctuate>
+					<rate>0.00002</rate>
+					<fitnessLimit>0</fitnessLimit>
+				</fluctuate>
+		    </purifyingFitness>
+		    <!-- ORF1ab1 sites under negative selection -->
+		    <purifyingFitness>
+			    <feature>ORF1ab1</feature>
+		        <sites>1401-1404, 2004-2007, 2235-2238, 2772-2775, 2910-2913, 3513-3516, 3594-3597, 3750-3753, 4137-4140, 5439-5442, 5595-5598, 5868-5871, 6363-6366, 6819-6822, 6960-6963, 7086-7089</sites>
+		        <rank>
+		        	<order>observed</order>
+		            <breakTies>random</breakTies>
+		        </rank>
+		        <fitness>
+		            <lowFitness>0.6</lowFitness>
+			        <minimumFitness>0.1</minimumFitness>
+		        </fitness>
+		    </purifyingFitness>
+		    <!-- ORF1ab2 sites under negative selection -->
+		    <purifyingFitness>
+			    <feature>ORF1ab2</feature>
+		        <sites>36-39, 48-51, 219-222, 279-282, 390-393, 1329-1332, 2652-2655</sites>
+		        <rank>
+		        	<order>observed</order>
+		            <breakTies>random</breakTies>
+		        </rank>
+		        <fitness>
+		            <lowFitness>0.6</lowFitness>
+			        <minimumFitness>0.1</minimumFitness>
+		        </fitness>
+		    </purifyingFitness>
+		    <!-- neutralfitness at ends -->
+		    <neutralFitness>
+                    <sites>1-265, 25381-29902</sites>
+            </neutralFitness> 
+		</fitnessFunction>
+
+		<mutator>
+			<nucleotideMutator>
+				<mutationRate>$mutationRate</mutationRate>
+                <indelmodel model="NB">0.3 3</indelmodel>
+                <insertprob>2E-1</insertprob>
+                <deleteprob>2.5E-1</deleteprob>                 
+	            <rateBias>
+	                0.42 2.49 0.29
+	                1.73 0.23 4.73
+	                6.99 0.20 0.60
+	                1.02 2.56 0.88
+	            </rateBias>
+			</nucleotideMutator>
+		</mutator>
+
+		<replicator>
+			<recombinantReplicator>
+				<dualInfectionProbability>0.1</dualInfectionProbability>
+				<recombinationProbability>$recombinationProbability</recombinationProbability>
+			</recombinantReplicator>
+		</replicator>
+
+		<epoch>
+			<generationCount>$generationCount</generationCount>
+		</epoch>
+
+		<samplingSchedule>      
+                
+                <!-- Sample genotypes at certain times in FASTA Format -->
+                <sampler>
+                    <atFrequency>$generationCount</atFrequency>
+                    <fileName>alignment_0.fa</fileName>
+                    <alignment>
+                        <sampleSize>$sampleSize</sampleSize>
+                        <format>FASTA</format>
+                        <label>seq_%g_%s</label>
+                    </alignment>
+                </sampler>   
+
+            </samplingSchedule>
+
+	</simulation>
+
+</santa>
