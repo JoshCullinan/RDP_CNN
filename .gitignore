@@ -51,3 +51,32 @@ _revert_*.py
 get_diag_settings.py
 get_path_A.py
 get_re_apply_pathA.py
+get_apply_run*.py
+get_diag_run*.py
+
+# Training / eval / audit log artifacts (regeneratable)
+eval_*.log
+train_*.log
+train_*.log.prior_attempt_oom
+audit_*.log
+build_runB2_*.log
+build_full.log
+step4_pipeline.log
+m12_*.log
+m14_*.log
+m04_*.log
+splits/*.log
+
+# Investigation work-product (the .log is regenerable from the .py)
+m13_santa_vs_real.log
+m14_realism_measures.partial.json
+
+# Local thesis PDF — personal artifact, not project code
+Detecting Viral Recombination*.pdf
+
+# SANTA simulator — keep XMLs/scripts/Simulation.py in git, exclude binary + derived
+santaSim_RDP/outputs/
+santaSim_RDP/santa.jar
+santaSim_RDP/sarbeco.fas
+santaSim_RDP/sarbecoStart.fa
+santaSim_RDP/.vscode/
