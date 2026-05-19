@@ -237,18 +237,20 @@ def stages_for_curriculum(stage: str) -> list[CurriculumStage]:
         30 kb: + long_content_30k_002 / _001
     'smoke' is a small 10 kb stage cap.
     """
+    # Per-stage batch sizes: keep L * B token budget ≈ constant so VRAM stays in
+    # safe range at 19 k and 30 k (B=8 OOMs at 19 k once allocator working set fills).
     if stage == "smoke" or stage == "A":
         return [CurriculumStage("10k", ["XML-2", "XML-6"], max_len=11000, batch_size=8)]
     if stage == "B":
         return [
             CurriculumStage("10k", ["XML-2", "XML-6"], max_len=11000, batch_size=8),
-            CurriculumStage("19k", ["XML-4"], max_len=19500, batch_size=8),
+            CurriculumStage("19k", ["XML-4"], max_len=19500, batch_size=4),
         ]
     if stage == "C":
         return [
             CurriculumStage("10k", ["XML-2", "XML-6"], max_len=11000, batch_size=8),
-            CurriculumStage("19k", ["XML-4"], max_len=19500, batch_size=8),
-            CurriculumStage("30k", ["long_content_30k_002"], max_len=30500, batch_size=8),
+            CurriculumStage("19k", ["XML-4"], max_len=19500, batch_size=4),
+            CurriculumStage("30k", ["long_content_30k_002"], max_len=30500, batch_size=2),
         ]
     raise ValueError(f"unknown stage: {stage!r}")
 
@@ -497,7 +499,13 @@ def train(cfg: TrainConfig) -> None:
     print(f"  total_steps estimate: {total_steps_est:,}", flush=True)
 
     for epoch in range(start_epoch, cfg.epochs + 1):
-        for stage in stages:
+        for stage_idx, stage in enumerate(stages):
+            # Clear cached memory before each new stage — sequence length jumps
+            # change the allocator's working set, and reserved-but-unused blocks
+            # from the previous stage cause fragmentation OOMs.
+            if device == "cuda":
+                torch.cuda.empty_cache()
+                torch.cuda.reset_peak_memory_stats()
             print(f"\n[{time.strftime('%H:%M:%S')}] === epoch {epoch} stage {stage.name} "
                   f"(shards: {stage.shards}, max_len={stage.max_len}) ===", flush=True)
             model.train()
@@ -604,15 +612,17 @@ def train(cfg: TrainConfig) -> None:
             with cfg.history_path.open("w") as f:
                 json.dump(history, f, indent=2)
 
-        # Checkpoint per epoch
-        torch.save({
-            "model_state": model.state_dict(),
-            "optim_state": optim.state_dict(),
-            "epoch": epoch,
-            "global_step": global_step,
-            "cfg": history["config"],
-        }, cfg.ckpt_path)
-        print(f"  ckpt saved → {cfg.ckpt_path}", flush=True)
+            # Save per-stage so a transition-OOM doesn't waste an hour.
+            torch.save({
+                "model_state": model.state_dict(),
+                "optim_state": optim.state_dict(),
+                "epoch": epoch,
+                "stage_idx_done": stage_idx,
+                "global_step": global_step,
+                "cfg": history["config"],
+            }, cfg.ckpt_path)
+            print(f"  ckpt saved → {cfg.ckpt_path} "
+                  f"(epoch {epoch} stage {stage.name})", flush=True)
 
     print(f"\n[{time.strftime('%H:%M:%S')}] training complete.", flush=True)
 
