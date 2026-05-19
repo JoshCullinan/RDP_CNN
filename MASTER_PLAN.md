@@ -138,12 +138,35 @@ Two-stage verification, completed end-to-end:
 
 ### Phase 1 — Self-supervised pretraining
 
-#### M1.1 — Backbone skeleton
+#### M1.1 — ✅ DONE 2026-05-19 — Backbone skeleton (HyenaDNA, PyTorch)
 
-- **Goal:** an untrained Mamba (primary) or Longformer (fallback) backbone wrapped as a Keras model with a per-position embedding output `(L, d_model)`.
-- **Deliverable:** `backbone_mamba.py` with a `build_backbone(seq_len, d_model=256, n_layers=8) -> tf.keras.Model` and a 30-line sanity test that runs a random `(B, L, 5)` one-hot through it and checks the output shape.
-- **Success criterion:** model builds without error on L=30000, forward pass on a batch of 2 at 30 kb completes in <2 s on the RTX 3070, memory headroom > 1 GB.
-- **Notes:** if Mamba install is painful on the current env, document the blocker and fall back to Longformer immediately rather than burn days fighting it.
+Artifacts: `backbone_hyenadna.py` (active), `backbone_mamba.py` (superseded, kept as record of the investigation).
+
+**The plan's "Mamba primary, Longformer fallback, Keras model" did not survive contact with reality.** The decision tree, in order:
+
+1. **TFLongformerModel** removed from modern HF (`transformers` 5.x dropped TF support upstream).
+2. **HF Mamba (PyTorch, slow path)** runs at L=30k in **18.9 s/forward** — 9× the master-plan budget. Pretraining MLM over 1.3M sequences at this throughput would take ~37 days on the 3070.
+3. **mamba-ssm / causal-conv1d CUDA build** — the canonical fast path. Both need system `nvcc`; the dev box has TF's bundled CUDA only. `pip install causal-conv1d` failed at the build-system step. This is exactly the "burn days fighting it" scenario the plan warned about.
+4. **HyenaDNA fallback** — pure-PyTorch (FFT-based long convolutions, no custom CUDA), HF checkpoint `LongSafari/hyenadna-small-32k-seqlen-hf`, pretrained on the human genome.
+
+| Spec | Target | Measured |
+|---|---:|---:|
+| Forward @ L=30k, B=2 | <2 s | **0.30 s** (~6.7× under budget) |
+| GPU peak | — | 1.23 GB |
+| GPU free after | >1 GB | **5.39 GB** (~5× over budget) |
+| Params | (d_model=256, 8L spec ≈ 3.5M) | 3.28M (d_model=256, **n_layer=4**) |
+
+HyenaDNA-small has n_layer=4 vs the master-plan-specified 8 — that's a published architectural fact for this size, not a knob. The medium-160k variant has n_layer=8 if needed later, but small-32k is sufficient for our 30k context and the human-genome pretrained weights are exactly what we want for Phase 1.
+
+**Side effect — Phase 1 may be much shorter than originally planned.** HyenaDNA-small was pretrained via causal language modelling on the human genome at 32k context. Codon biases, conservation patterns, and many sequence statistics relevant to HIV will already be in the weights. M1.2 (MLM pretraining) might be a short fine-tune rather than from-scratch, and the success bar should be re-thought before committing GPU hours.
+
+**Project framework switch:** all code from M1.1 onward is PyTorch. The cache reader, splits, and Phase-0 evaluation infrastructure (M0.4 inference, `m04_verify_inference.py`) remain TensorFlow/Keras because those evaluate the legacy runB2_sig10 checkpoint. The two stacks coexist in the same venv. See [[project-framework-switch-pytorch-hyenadna]] in auto-memory for the full dependency list and rationale.
+
+New dependencies installed in `.venv/`:
+- `torch==2.6.0+cu124` (+ bundled CUDA libs, ~2.5 GB)
+- `transformers==5.8.1`
+- `kernels==0.14.1` (HF prebuilt-kernel helper; pulled in but Mamba kernels not on the Hub)
+- `mambapy==1.2.0` (alternative Mamba backend; tried, same slow path — leaving installed in case useful later)
 
 #### M1.2 — MLM training loop
 
