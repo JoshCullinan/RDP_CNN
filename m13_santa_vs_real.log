@@ -1,0 +1,71 @@
+[15:28:00] loading real HIV sequences
+  loaded 20 real HIV sequences
+    CRF02_AG|recomb_CRF02_AG: len=9127
+    CRF02_AG|parent_A1: len=8895
+    CRF02_AG|parent_G: len=8920
+    CRF07_BC|B: len=9180
+    CRF07_BC|C: len=9073
+    CRF07_BC|07_BC: len=9699
+    CRF08_BC|recomb_CRF08_BC: len=8721
+    CRF08_BC|parent_B: len=9719
+    CRF08_BC|parent_C: len=8915
+    CRF12_BF|recomb_CRF12_BF: len=9643
+    CRF12_BF|parent_B: len=9719
+    CRF12_BF|parent_F1: len=8908
+    genbank|AF005494: len=8968
+    genbank|AF061641: len=9041
+    genbank|AF385936: len=9704
+    genbank|AY008715: len=8802
+    genbank|K03455: len=9719
+    genbank|L39106: len=9201
+    genbank|U46016: len=9031
+    genbank|U51190: len=8999
+
+[15:28:00] sampling SANTA XML-6 sequences
+  sampled 30 SANTA seqs, avg_len=10000
+
+=== Line 2: statistical fingerprints ===
+  k=3: JSD real↔SANTA = 0.0456 bits   (within-real 0.0000, within-SANTA 0.0008)
+  k=6: JSD real↔SANTA = 0.1526 bits   (within-real 0.0041, within-SANTA 0.0114)
+  GC real:  mean=0.4200 std=0.0049 [0.411, 0.428]
+  GC SANTA: mean=0.4316 std=0.0289 [0.391, 0.480]
+  Period-3 real:  power_frac=0.00328 zscore=1.20 (n=20)
+  Period-3 SANTA: power_frac=0.00971 zscore=13.36 (n=30)
+  Pairwise Hamming real:  mean=0.7096 (n_pairs=50)
+  Pairwise Hamming SANTA: mean=0.5332 (n_pairs=50)
+
+[15:28:08] Line 2 saved to /home/joshc/Dev/RDP_CNN/m13_santa_vs_real.json
+
+=== Line 1: HyenaDNA-small next-token probe on REAL HIV ===
+  device=cuda
+  loading LongSafari/hyenadna-small-32k-seqlen-hf
+Loading weights:   0%|          | 0/108 [00:00<?, ?it/s]Loading weights: 100%|██████████| 108/108 [00:00<00:00, 11028.24it/s]
+  params: 3,281,664
+[transformers] `use_return_dict` is deprecated! Use `return_dict` instead!
+    [2/20]  8.10 seq/s  RSS 1.4 GB
+    [4/20]  13.93 seq/s  RSS 1.4 GB
+    [6/20]  18.35 seq/s  RSS 1.4 GB
+    [8/20]  20.42 seq/s  RSS 1.4 GB
+    [10/20]  22.06 seq/s  RSS 1.4 GB
+    [12/20]  23.72 seq/s  RSS 1.4 GB
+    [14/20]  25.11 seq/s  RSS 1.4 GB
+    [16/20]  25.86 seq/s  RSS 1.4 GB
+    [18/20]  26.73 seq/s  RSS 1.4 GB
+    [20/20]  27.65 seq/s  RSS 1.4 GB
+  next-token accuracy on REAL HIV: 0.361 (n_positions=183,964)
+    A: acc=0.747  (n=65,877)
+    C: acc=0.021  (n=32,924)
+    G: acc=0.248  (n=44,368)
+    T: acc=0.136  (n=40,795)
+    gap: acc=0.000  (n=0)
+    pos 0-25%: acc=0.362  (n=45,998)
+    pos 25-75%: acc=0.370  (n=91,984)
+    pos 75-100%: acc=0.342  (n=45,982)
+
+  COMPARISON:
+    SANTA XML-6 (length-matched): 0.285
+    SANTA mean: 0.308
+    REAL HIV:    0.361
+    Δ(real - XML-6) = +0.076
+
+[15:28:10] full report saved to /home/joshc/Dev/RDP_CNN/m13_santa_vs_real.json
