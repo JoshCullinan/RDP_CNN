@@ -1,10 +1,48 @@
 # Master plan — sequence-only backbone replacement
 
-**Status:** active, written 2026-05-18.
-**Author:** strategic synthesis of `project_backbone_replacement_direction.md` and `project_backbone_replacement_training_plan.md` in auto-memory.
+**Status:** active, written 2026-05-18. **Reality update 2026-05-28.**
 **Audience:** future agents (Claude or otherwise) and the human collaborator.
 
 ---
+
+## 2026-05-28 status header — read this first
+
+The Phase 1-4 plan below was written under the assumption that **MLM pretraining + a HyenaDNA backbone + cross-sequence attention** would deliver sequence-only breakpoint detection. That assumption proved wrong over May 19-25:
+
+- **M1.2 MLM** (10 days planned, ran 13 epochs / 5 days, val acc 0.621): completed but the resulting pretrained backbone **actively hurt** downstream breakpoint detection. See `project_m13_pretraining_hurts.md`.
+- **M1.3 probes** (random-init vs M1.2-init Hyena features): random consistently beat M1.2 by 0.15-0.25 F1 across 5 setups. The MLM objective trains nucleotide-identity *invariance* — opposite of what breakpoint detection needs.
+- **M3-mini at 40 events**: F1 0.41 looked promising but turned out to be small-sample sampling noise. At 200+ events, Hyena-feature-based M3 collapses to F1 0.28 (trivial baseline) regardless of head type.
+- **Pivot to legacy-CNN-style M3** (raw 22ch + dilated CNN head, no Hyena): **F1 0.509 on LANL real-HIV CRFs**, within 0.010 of classical RDP standalone (0.519). First working sequence-only detector.
+
+**Actual completed milestones (replacing the planned Phases 1-4):**
+
+| Milestone | Date | Result |
+|---|---|---|
+| M1.2 MLM pretraining | 2026-05-23 | Done, val acc 0.621, but **counterproductive downstream** |
+| M1.3 probes + M3-mini | 2026-05-24 | Random > M1.2 across all setups; Hyena features structurally wrong |
+| Path I combined-feature probe | 2026-05-25 | Hyena features don't add value on top of random projections |
+| **M3 v1: dilated head, 5k events** | 2026-05-27 | **LANL F1 0.409** (first working sequence-only baseline) |
+| **M3 v2: 20k events, pos_weight=70** | 2026-05-27 | **LANL F1 0.509** (peer to classical RDP 0.519) |
+| **M3 v2 multi-virus eval** | 2026-05-27 | SARS-CoV-2 XBB hit Δ=293bp; Zika clean; Ebola FAILS (cross-species) |
+| M3 XL: 50k × 40 epochs | 2026-05-27 | Overfit to SANTA, LANL 0.434 (worse than v2) |
+| SARS-CoV-2 peak analysis | 2026-05-28 | Half the "FPs" are real Spike-hotspot signals (1.81× enrichment) |
+| Multi-virus v2 (edge_buffer=200) | 2026-05-28 | Zika 1.5→0.41 peaks, SARS 3.3→2.1, Ebola unchanged |
+| **M3 v3: + neg_frac=0.15 cross-species negatives** | **2026-05-28** | **IN PROGRESS** (background job, ~2.5h ETA) |
+
+**Current best model:** `models_test/m3d_big_snaps/m3d_best.pt` (M3 v2, dilated CNN, raw 22ch input, LANL F1 0.509).
+
+**The original Phase 1-4 plan below is retained as historical context but is NOT the active plan.** New work iterates from M3 v2 outcomes (memory files: `project_m3_lanl_v2.md`, `project_m3_multivirus.md`, `project_m3_multivirus_v2.md`, `project_m3_sars_peaks_analysis.md`).
+
+**Active questions for next session:**
+- Does M3 v3 (cross-species negatives) fix Ebola without regressing LANL?
+- Can we push LANL F1 past classical RDP (>0.519) with more data diversity (not just more of the same)?
+- Should we expand multi-virus deployment claim — currently HIV (LANL 0.509) + SARS-CoV-2 XBB (Δ=293bp).
+
+---
+
+## Original plan (May 18, retained for context)
+
+
 
 ## North star
 

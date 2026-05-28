@@ -264,6 +264,51 @@ def event_plan(cache: CacheV2, shard_names: list[str], n: int,
     return out
 
 
+def load_negative_panels(panels: tuple[str, ...]) -> dict[str, list[np.ndarray]]:
+    """Load real-virus reference panels as int8 sequences for negative-control
+    triplet sampling. Keyed by panel name."""
+    from Bio import SeqIO
+    out: dict[str, list[np.ndarray]] = {}
+    for panel in panels:
+        fa = Path(f"/home/joshc/Dev/RDP_CNN/data/real_recombinants/{panel}/aligned.fa")
+        if not fa.exists():
+            print(f"  WARN: negative panel {panel} missing at {fa}", flush=True)
+            continue
+        recs = []
+        for r in SeqIO.parse(fa, "fasta"):
+            # Skip known recombinants — we want NEGATIVES only.
+            if "recombinant" in r.id.lower() or "_xbb_" in r.id.lower() and "parent" not in r.id.lower():
+                continue
+            s = str(r.seq).upper()
+            arr = np.empty(len(s), dtype=np.int8)
+            for i, ch in enumerate(s):
+                arr[i] = {"A": 0, "T": 1, "G": 2, "C": 3, "-": 4}.get(ch, 4)
+            recs.append(arr)
+        out[panel] = recs
+        print(f"  loaded negative panel {panel}: {len(recs)} sequences", flush=True)
+    return out
+
+
+def sample_negative(neg_panels: dict[str, list[np.ndarray]],
+                    rng: random.Random, max_len: int) -> dict | None:
+    """Sample a 3-sequence negative-control triplet from the loaded panels.
+    Returns event-shaped dict with empty bps."""
+    if not neg_panels:
+        return None
+    panel = rng.choice(list(neg_panels.keys()))
+    recs = neg_panels[panel]
+    if len(recs) < 3:
+        return None
+    R_idx, P1_idx, P2_idx = rng.sample(range(len(recs)), 3)
+    R, P1, P2 = recs[R_idx], recs[P1_idx], recs[P2_idx]
+    L = min(len(R), len(P1), len(P2), max_len)
+    return {
+        "shard": f"neg:{panel}", "ev_idx": -1, "L": L,
+        "R": R[:L].copy(), "P1": P1[:L].copy(), "P2": P2[:L].copy(),
+        "bps": [],          # negative control: no breakpoints
+    }
+
+
 def load_event(cache: CacheV2, sh: str, ev_idx: int) -> dict:
     ev = cache.shards[sh].get_triplet(ev_idx)
     L = ev["seq_len"]
@@ -355,6 +400,14 @@ class Cfg:
     snapshots_dir: Path
     history_out: Path
     log_every: int
+    neg_frac: float = 0.0     # fraction of each epoch's training steps that
+                              # use a NEGATIVE-CONTROL triplet (real virus
+                              # panel, no recombination, target = all zeros).
+                              # Teaches the model to suppress predictions on
+                              # constant-high-divergence inputs.
+    neg_panels: tuple[str, ...] = (
+        "ebola", "zika", "sarscov2_full",
+    )
 
 
 def train(cfg: Cfg) -> None:
@@ -412,6 +465,16 @@ def train(cfg: Cfg) -> None:
         raise SystemExit("empty plan")
     print(f"  train: {len(train_plan)} events  val: {len(val_plan)} events", flush=True)
 
+    # Load real-virus negative-control panels if neg_frac > 0
+    neg_panels_data: dict[str, list[np.ndarray]] = {}
+    if cfg.neg_frac > 0:
+        print(f"  neg_frac={cfg.neg_frac}: loading negative panels {cfg.neg_panels}",
+              flush=True)
+        neg_panels_data = load_negative_panels(cfg.neg_panels)
+        if not neg_panels_data:
+            print(f"  WARN: no negative panels loaded, neg_frac disabled", flush=True)
+            cfg.neg_frac = 0.0
+
     total_steps = cfg.epochs * len(train_plan)
     pw = torch.tensor([cfg.pos_weight], device=device)
     thresholds = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80]
@@ -431,8 +494,18 @@ def train(cfg: Cfg) -> None:
         ep_loss = 0.0; ep_n = 0
         t_ep = time.time()
         for step_in_ep, idx in enumerate(order):
-            sh, ev_idx = train_plan[idx]
-            ev = load_event(cache, sh, ev_idx)
+            # With probability neg_frac, swap in a negative-control triplet
+            # instead of the planned positive event.
+            if cfg.neg_frac > 0 and rng.random() < cfg.neg_frac:
+                neg = sample_negative(neg_panels_data, rng, cfg.max_len)
+                if neg is not None:
+                    ev = neg
+                else:
+                    sh, ev_idx = train_plan[idx]
+                    ev = load_event(cache, sh, ev_idx)
+            else:
+                sh, ev_idx = train_plan[idx]
+                ev = load_event(cache, sh, ev_idx)
             if ev["L"] > cfg.max_len:
                 ev["R"] = ev["R"][:cfg.max_len]; ev["P1"] = ev["P1"][:cfg.max_len]
                 ev["P2"] = ev["P2"][:cfg.max_len]; ev["L"] = cfg.max_len
@@ -525,6 +598,12 @@ def main():
     ap.add_argument("--snapshots-dir", type=Path, default=Path("models_test/m3d_snapshots"))
     ap.add_argument("--history-out", type=Path, default=Path("models_test/m3d_history.json"))
     ap.add_argument("--log-every", type=int, default=200)
+    ap.add_argument("--neg-frac", type=float, default=0.0,
+                    help="fraction of training steps that use a negative-control "
+                         "triplet (real virus panel, no recombination)")
+    ap.add_argument("--neg-panels", nargs="+",
+                    default=["ebola", "zika", "sarscov2_full"],
+                    help="real virus panels to source negative triplets from")
     args = ap.parse_args()
 
     cfg = Cfg(
@@ -539,6 +618,8 @@ def main():
         ckpt_in=args.ckpt_in, ckpt_out=args.ckpt_out,
         snapshots_dir=args.snapshots_dir, history_out=args.history_out,
         log_every=args.log_every,
+        neg_frac=args.neg_frac,
+        neg_panels=tuple(args.neg_panels),
     )
     train(cfg)
 

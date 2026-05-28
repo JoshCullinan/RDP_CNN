@@ -59,7 +59,8 @@ def pairwise_divergence(a: np.ndarray, b: np.ndarray) -> float:
 
 
 TOLERANCE = 500
-EDGE_BUFFER = 25
+EDGE_BUFFER = 200       # wider than the default 25 — suppresses 5'UTR/3'UTR
+                        # boundary artifacts identified in m3_sars_peaks analysis
 
 
 def extract_peaks(p: np.ndarray, threshold: float, edge_buffer: int = EDGE_BUFFER
