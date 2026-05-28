@@ -36,7 +36,36 @@ from Bio import SeqIO
 from scipy.signal import find_peaks
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from m3_dilated import DilatedHead, raw_features
+from m3_dilated import DilatedHead, M3MultiHead, build_head, raw_features
+
+
+def load_trained_head(ckpt: Path, device: str, head_hidden: int,
+                      head_blocks: int, head_dropout: float,
+                      head_mode: str = "auto"):
+    """Load a trained BP head, auto-detecting single (v2) vs multi (v4) from
+    the checkpoint's saved cfg. Returns (head, head_mode)."""
+    ck = torch.load(ckpt, map_location=device, weights_only=False)
+    if head_mode == "auto":
+        head_mode = ck.get("cfg", {}).get("head_mode", "single")
+    head = build_head(head_mode, 22, head_hidden, head_blocks, head_dropout).to(device)
+    head.load_state_dict(ck["head_state"])
+    head.eval()
+    return head, head_mode, ck
+
+
+def head_forward(head, head_mode: str, feats: torch.Tensor, device: str):
+    """Run the head; returns (bp_prob (L,) np.ndarray, aux_prob float|None)."""
+    with torch.no_grad():
+        with torch.amp.autocast("cuda", dtype=torch.bfloat16,
+                                 enabled=(device == "cuda")):
+            out = head(feats[None])
+    if head_mode == "multi":
+        bp_logits, aux_logit = out
+        aux_prob = float(torch.sigmoid(aux_logit.float())[0])
+        p = torch.sigmoid(bp_logits[0].float()).cpu().numpy()
+        return p, aux_prob
+    p = torch.sigmoid(out.squeeze(0).float()).cpu().numpy()
+    return p, None
 
 
 # v2 cache encoding: {A:0, T:1, G:2, C:3, gap:4}
@@ -104,6 +133,7 @@ def main():
     ap.add_argument("--head-hidden", type=int, default=128)
     ap.add_argument("--head-blocks", type=int, default=6)
     ap.add_argument("--head-dropout", type=float, default=0.1)
+    ap.add_argument("--head-mode", choices=["auto", "single", "multi"], default="auto")
     ap.add_argument("--out", type=Path, default=Path("models_test/m3_eval_lanl.json"))
     args = ap.parse_args()
 
@@ -116,13 +146,12 @@ def main():
             truth[r["crf"]].append(int(r["hxb2_position"]))
     truth = {k: sorted(set(v)) for k, v in truth.items()}
 
-    # Load model
-    head = DilatedHead(in_channels=22, hidden=args.head_hidden,
-                       n_blocks=args.head_blocks, dropout=args.head_dropout).to(device)
-    ck = torch.load(args.ckpt, map_location=device, weights_only=False)
-    head.load_state_dict(ck["head_state"])
-    head.eval()
-    print(f"[{time.strftime('%H:%M:%S')}] device={device}", flush=True)
+    # Load model (auto-detects single v2 vs multi v4 from the ckpt cfg)
+    head, head_mode, ck = load_trained_head(
+        args.ckpt, device, args.head_hidden, args.head_blocks, args.head_dropout,
+        args.head_mode)
+    print(f"[{time.strftime('%H:%M:%S')}] device={device}  head_mode={head_mode}",
+          flush=True)
     print(f"  ckpt: {args.ckpt}  epoch={ck.get('epoch')}  "
           f"gs={ck.get('global_step', 0):,}", flush=True)
     print(f"  head params: {sum(p.numel() for p in head.parameters()):,}", flush=True)
@@ -153,11 +182,7 @@ def main():
                 content_end = min(content_end, int(non_gap[-1]) + 1)
 
         feats = raw_features(R, P1, P2).to(device)
-        with torch.no_grad():
-            with torch.amp.autocast("cuda", dtype=torch.bfloat16,
-                                     enabled=(device == "cuda")):
-                logits = head(feats[None]).squeeze(0)
-        p = torch.sigmoid(logits.float()).cpu().numpy()
+        p, aux_prob = head_forward(head, head_mode, feats, device)
 
         tbps = truth[crf]
         best_per_thr = []
@@ -177,11 +202,13 @@ def main():
             "L": L, "content_end": content_end,
             "truth_bps": tbps,
             "best": best, "all_thresholds": best_per_thr,
+            "aux_prob": aux_prob,
         }
         print(f"  {crf} (L={L} content_end={content_end} n_true_bps={len(tbps)})")
+        aux_str = f"  aux_prob={aux_prob:.3f}" if aux_prob is not None else ""
         print(f"    BEST F1 {best['f1']:.3f} @ thr={best['thr']:.2f}  "
               f"P {best['precision']:.3f}  R {best['recall']:.3f}  "
-              f"(tp/fp/fn = {best['tp']}/{best['fp']}/{best['fn']})")
+              f"(tp/fp/fn = {best['tp']}/{best['fp']}/{best['fn']}){aux_str}")
         print(f"    truth: {tbps}")
         print(f"    peaks: {best['peaks'][:20]}")
 
@@ -212,11 +239,23 @@ def main():
     print(f"  Legacy CNN runOH (sequence-only)  : F1 0.000")
     print(f"  Our M3 (sequence-only)            : F1 {best_agg['f1']:.3f}")
 
+    if head_mode == "multi":
+        aux_vals = [r["aux_prob"] for r in per_crf.values() if r["aux_prob"] is not None]
+        if aux_vals:
+            print(f"\n=== Aux gate (LANL = TRUE recombinants → want HIGH) ===")
+            print(f"  mean aux_prob over CRFs: {np.mean(aux_vals):.3f}  "
+                  f"min {min(aux_vals):.3f}  max {max(aux_vals):.3f}")
+            print(f"  per-CRF: " + ", ".join(
+                f"{crf}={r['aux_prob']:.3f}" for crf, r in per_crf.items()
+                if r["aux_prob"] is not None))
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps({
+        "head_mode": head_mode,
         "per_crf": {crf: {"best": r["best"], "L": r["L"],
                            "content_end": r["content_end"],
-                           "truth_bps": r["truth_bps"]}
+                           "truth_bps": r["truth_bps"],
+                           "aux_prob": r["aux_prob"]}
                      for crf, r in per_crf.items()},
         "aggregate": agg[:5],
     }, indent=2))

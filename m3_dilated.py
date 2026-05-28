@@ -169,6 +169,85 @@ class DilatedHead(nn.Module):
         return self.head(h).squeeze(1)         # (B, L)
 
 
+class M3MultiHead(nn.Module):
+    """Two-head model (M3 v4): per-position BP logits + a single per-triplet
+    "is this a recombinant?" logit.
+
+    The trunk is the SAME residual dilated conv stack as ``DilatedHead`` (kept
+    as a separate class so v2 single-head checkpoints still load via
+    ``DilatedHead``). The BP head is identical to v2's final conv.
+
+    The aux head reads THREE pooled signals over positions:
+      - mean / max of the trunk features (transition-energy structure), and
+      - the per-channel mean of the RAW 22-channel input (``x.mean`` over L).
+
+    The raw-input mean is the decisive addition for cross-species safety: each
+    block's GroupNorm centres the trunk activations, so absolute parent-match
+    *level* — high for a true recombinant (a mosaic of its parents, matching one
+    of them everywhere), low for a cross-species triplet (matches neither) — is
+    weakened in the trunk. Feeding ``mean(match_p1), mean(match_p2), ...``
+    directly gives the aux head the divergence signal that separates an HIV
+    recombinant from an Ebola cross-species comparison. This is consistent with
+    M3's existing feature philosophy (the raw 22 channels already include
+    MaxChi-style statistics).
+
+    forward(x: (B, L, C_in)) → (bp_logits: (B, L), aux_logit: (B,))
+    """
+
+    def __init__(self, in_channels: int = 22, hidden: int = 128,
+                 n_blocks: int = 6, kernel: int = 3,
+                 dropout: float = 0.1) -> None:
+        super().__init__()
+        self.in_channels = in_channels
+        self.proj = nn.Conv1d(in_channels, hidden, kernel_size=1)
+        self.blocks = nn.ModuleList()
+        for i in range(n_blocks):
+            d = 2 ** i
+            pad = d * (kernel // 2)
+            self.blocks.append(nn.Sequential(
+                nn.Conv1d(hidden, hidden, kernel_size=kernel,
+                          padding=pad, dilation=d),
+                nn.GELU(),
+                nn.GroupNorm(8, hidden),
+                nn.Dropout1d(dropout),
+            ))
+        self.bp_head = nn.Conv1d(hidden, 1, kernel_size=1)
+        self.aux_head = nn.Sequential(
+            nn.Linear(2 * hidden + in_channels, hidden),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden, 1),
+        )
+
+    def trunk(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, L, C_in) → (B, C_in, L)
+        x = x.transpose(1, 2)
+        h = self.proj(x)
+        for block in self.blocks:
+            h = h + block(h)
+        return h                                # (B, hidden, L)
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        h = self.trunk(x)                       # (B, hidden, L)
+        bp_logits = self.bp_head(h).squeeze(1)              # (B, L)
+        mean_pool = h.mean(dim=-1)                          # (B, hidden)
+        max_pool = h.amax(dim=-1)                           # (B, hidden)
+        raw_mean = x.mean(dim=1).to(mean_pool.dtype)        # (B, C_in) — over L
+        pooled = torch.cat([mean_pool, max_pool, raw_mean], dim=-1)  # (B, 2H+C)
+        aux_logit = self.aux_head(pooled).squeeze(-1)       # (B,)
+        return bp_logits, aux_logit
+
+
+def build_head(head_mode: str, feat_dim: int, hidden: int, blocks: int,
+               dropout: float) -> nn.Module:
+    """Construct the BP head for the requested mode (used by training + eval)."""
+    if head_mode == "multi":
+        return M3MultiHead(feat_dim, hidden, blocks, dropout=dropout)
+    if head_mode == "single":
+        return DilatedHead(feat_dim, hidden, blocks, dropout=dropout)
+    raise ValueError(head_mode)
+
+
 # ---------- feature extraction (frozen backbone) ----------
 
 @torch.no_grad()
@@ -306,6 +385,49 @@ def sample_negative(neg_panels: dict[str, list[np.ndarray]],
         "shard": f"neg:{panel}", "ev_idx": -1, "L": L,
         "R": R[:L].copy(), "P1": P1[:L].copy(), "P2": P2[:L].copy(),
         "bps": [],          # negative control: no breakpoints
+        "is_recomb": 0,
+    }
+
+
+def build_santa_neg_pool(cache: CacheV2, shard_names: list[str]
+                         ) -> list[tuple[str, int]]:
+    """List (shard, file_idx) pairs in the train shards that have >=3
+    non-recombinant sequences — the pool for SANTA-internal negatives."""
+    pool: list[tuple[str, int]] = []
+    for sh in shard_names:
+        if sh not in cache.shards:
+            continue
+        shard = cache.shards[sh]
+        for fi, ids in shard._non_recomb_ids.items():
+            if len(ids) >= 3:
+                pool.append((sh, int(fi)))
+    return pool
+
+
+def sample_santa_negative(cache: CacheV2, neg_file_pool: list[tuple[str, int]],
+                          rng: random.Random, max_len: int) -> dict | None:
+    """Sample a NON-recombinant SANTA triplet: 3 non-recombinant sequences from
+    the same alignment (coordinate-aligned, no registered mosaic). This puts
+    SANTA provenance on BOTH sides of the aux label so the aux head is forced to
+    learn recombination *structure*, not "is this simulator output?". Returns an
+    event-shaped dict with empty bps."""
+    if not neg_file_pool:
+        return None
+    sh, fi = neg_file_pool[rng.randrange(len(neg_file_pool))]
+    shard = cache.shards[sh]
+    ids = shard.sample_non_recombinant_ids(fi, 3, rng)
+    if len(ids) < 3:
+        return None
+    align = shard.get_alignment(fi)                 # memmap view (n, L)
+    L = min(int(align.shape[1]), max_len)
+    R = np.asarray(align[ids[0] - 1][:L], dtype=np.int8).copy()
+    P1 = np.asarray(align[ids[1] - 1][:L], dtype=np.int8).copy()
+    P2 = np.asarray(align[ids[2] - 1][:L], dtype=np.int8).copy()
+    return {
+        "shard": f"santaneg:{sh}", "ev_idx": -1, "L": L,
+        "R": R, "P1": P1, "P2": P2,
+        "bps": [],
+        "is_recomb": 0,
     }
 
 
@@ -322,6 +444,7 @@ def load_event(cache: CacheV2, sh: str, ev_idx: int) -> dict:
         "P1": np.asarray(ev["P1"], dtype=np.int8),
         "P2": np.asarray(ev["P2"], dtype=np.int8),
         "bps": bps,
+        "is_recomb": 1,
     }
 
 
@@ -339,10 +462,11 @@ def linear_warmup_cosine(step: int, warmup: int, total: int,
 # ---------- eval ----------
 
 def evaluate(backbone, head, cache, val_plan, max_len, device, amp_dtype,
-              thresholds, feature_mode: str) -> dict:
+              thresholds, feature_mode: str, head_mode: str = "single") -> dict:
     head.eval()
     per_thr = {thr: {"tp": 0, "fp": 0, "fn": 0} for thr in thresholds}
     n_events = 0
+    aux_probs: list[float] = []
     t0 = time.time()
     for sh, ev_idx in val_plan:
         ev = load_event(cache, sh, ev_idx)
@@ -353,7 +477,13 @@ def evaluate(backbone, head, cache, val_plan, max_len, device, amp_dtype,
         feats, _ = features_for_event(feature_mode, ev, backbone, device)
         with torch.no_grad():
             with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=(device=="cuda")):
-                logits = head(feats[None])           # (1, L)
+                out = head(feats[None])
+        if head_mode == "multi":
+            bp_logits, aux_logit = out
+            logits = bp_logits                       # (1, L)
+            aux_probs.append(float(torch.sigmoid(aux_logit.float())[0]))
+        else:
+            logits = out                             # (1, L)
         p = torch.sigmoid(logits[0].float()).cpu().numpy()
         for thr in thresholds:
             peaks = extract_peaks(p, thr)
@@ -370,8 +500,10 @@ def evaluate(backbone, head, cache, val_plan, max_len, device, amp_dtype,
         f1 = 2 * prec * rec / max(1e-9, prec + rec)
         out.append({"thr": thr, "precision": prec, "recall": rec, "f1": f1, **c})
     out.sort(key=lambda d: -d["f1"])
+    aux_mean = float(np.mean(aux_probs)) if aux_probs else float("nan")
     return {"n_events": n_events, "elapsed_s": time.time() - t0,
-            "best": out[0], "all_thresholds": out}
+            "best": out[0], "all_thresholds": out,
+            "aux_prob_mean": aux_mean}
 
 
 # ---------- training ----------
@@ -395,6 +527,12 @@ class Cfg:
     head_dropout: float
     backbone_mode: str        # 'random' | 'm12' | 'hf'
     feature_mode: str         # 'hyena' | 'raw' | 'combined'
+    head_mode: str            # 'single' (v2) | 'multi' (v4: + aux gate head)
+    lambda_aux: float         # weight on the aux "is recombinant?" BCE term
+    neg_santa_frac: float     # of each NEGATIVE step, fraction that is a
+                              # SANTA-internal non-recombinant triplet (vs a
+                              # real-virus-panel triplet). Breaks the
+                              # SANTA-vs-real provenance confound.
     ckpt_in: Path
     ckpt_out: Path
     snapshots_dir: Path
@@ -447,9 +585,10 @@ def train(cfg: Cfg) -> None:
         feat_dim = 22 + 3 * (2 * d_model)
     else:
         raise ValueError(cfg.feature_mode)
-    head = DilatedHead(in_channels=feat_dim, hidden=cfg.head_hidden,
-                       n_blocks=cfg.head_blocks, dropout=cfg.head_dropout).to(device)
-    print(f"  feature_mode={cfg.feature_mode}  feat_dim={feat_dim}", flush=True)
+    head = build_head(cfg.head_mode, feat_dim, cfg.head_hidden,
+                      cfg.head_blocks, cfg.head_dropout).to(device)
+    print(f"  feature_mode={cfg.feature_mode}  feat_dim={feat_dim}  "
+          f"head_mode={cfg.head_mode}", flush=True)
     n_head = sum(p.numel() for p in head.parameters())
     n_bb = sum(p.numel() for p in backbone.parameters()) if backbone is not None else 0
     print(f"  backbone params (frozen): {n_bb:,}  head params (trainable): {n_head:,}",
@@ -465,14 +604,23 @@ def train(cfg: Cfg) -> None:
         raise SystemExit("empty plan")
     print(f"  train: {len(train_plan)} events  val: {len(val_plan)} events", flush=True)
 
-    # Load real-virus negative-control panels if neg_frac > 0
+    # Negative-control sources (only used if neg_frac > 0):
+    #   - SANTA-internal: 3 non-recombinant seqs from one alignment (breaks the
+    #     SANTA-vs-real provenance confound — see sample_santa_negative).
+    #   - real-virus panels: cross-species anchors (ebola/zika/sarscov2).
     neg_panels_data: dict[str, list[np.ndarray]] = {}
+    santa_neg_pool: list[tuple[str, int]] = []
     if cfg.neg_frac > 0:
-        print(f"  neg_frac={cfg.neg_frac}: loading negative panels {cfg.neg_panels}",
+        santa_neg_pool = build_santa_neg_pool(cache, cfg.train_shards)
+        print(f"  neg_frac={cfg.neg_frac} (santa_frac={cfg.neg_santa_frac}): "
+              f"{len(santa_neg_pool)} SANTA files with >=3 non-recombinants",
               flush=True)
-        neg_panels_data = load_negative_panels(cfg.neg_panels)
-        if not neg_panels_data:
-            print(f"  WARN: no negative panels loaded, neg_frac disabled", flush=True)
+        if cfg.neg_santa_frac < 1.0:
+            print(f"  loading real negative panels {cfg.neg_panels}", flush=True)
+            neg_panels_data = load_negative_panels(cfg.neg_panels)
+        if not santa_neg_pool and not neg_panels_data:
+            print(f"  WARN: no negative sources available, neg_frac disabled",
+                  flush=True)
             cfg.neg_frac = 0.0
 
     total_steps = cfg.epochs * len(train_plan)
@@ -493,11 +641,18 @@ def train(cfg: Cfg) -> None:
         rng.shuffle(order)
         ep_loss = 0.0; ep_n = 0
         t_ep = time.time()
+        ep_bp = 0.0; ep_aux = 0.0; aux_correct = 0; aux_total = 0
         for step_in_ep, idx in enumerate(order):
-            # With probability neg_frac, swap in a negative-control triplet
-            # instead of the planned positive event.
+            # With probability neg_frac, swap in a NEGATIVE-CONTROL triplet
+            # instead of the planned positive event. Negatives are SANTA-internal
+            # (with prob neg_santa_frac) or real-virus-panel triplets.
             if cfg.neg_frac > 0 and rng.random() < cfg.neg_frac:
-                neg = sample_negative(neg_panels_data, rng, cfg.max_len)
+                use_santa = santa_neg_pool and (
+                    not neg_panels_data or rng.random() < cfg.neg_santa_frac)
+                if use_santa:
+                    neg = sample_santa_negative(cache, santa_neg_pool, rng, cfg.max_len)
+                else:
+                    neg = sample_negative(neg_panels_data, rng, cfg.max_len)
                 if neg is not None:
                     ev = neg
                 else:
@@ -517,15 +672,37 @@ def train(cfg: Cfg) -> None:
                 g["lr"] = cfg.lr * lr_mult
 
             feats, _ = features_for_event(cfg.feature_mode, ev, backbone, device)
+            is_recomb = int(ev.get("is_recomb", 1))
 
             optim.zero_grad(set_to_none=True)
             with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=(device=="cuda")):
-                logits = head(feats[None]).squeeze(0)   # (L,)
-                loss = F.binary_cross_entropy_with_logits(logits, y, pos_weight=pw)
+                if cfg.head_mode == "multi":
+                    bp_logits, aux_logit = head(feats[None])
+                    bp_logits = bp_logits.squeeze(0)     # (L,)
+                    aux_logit = aux_logit.squeeze(0)     # scalar
+                    # BP loss only on POSITIVES — never push BP→0 on negatives
+                    # (that was the v3 failure). Negatives shape the trunk only
+                    # via the aux gradient.
+                    if is_recomb:
+                        l_bp = F.binary_cross_entropy_with_logits(
+                            bp_logits, y, pos_weight=pw)
+                    else:
+                        l_bp = bp_logits.new_zeros(())
+                    aux_tgt = aux_logit.new_full((), float(is_recomb))
+                    l_aux = F.binary_cross_entropy_with_logits(aux_logit, aux_tgt)
+                    loss = l_bp + cfg.lambda_aux * l_aux
+                else:
+                    logits = head(feats[None]).squeeze(0)   # (L,)
+                    loss = F.binary_cross_entropy_with_logits(logits, y, pos_weight=pw)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(head.parameters(), cfg.grad_clip)
             optim.step()
 
+            if cfg.head_mode == "multi":
+                ep_bp += float(l_bp) * (ev["L"] if is_recomb else 0)
+                ep_aux += float(l_aux)
+                aux_total += 1
+                aux_correct += int((aux_logit.item() > 0) == bool(is_recomb))
             ep_loss += float(loss.item()) * ev["L"]
             ep_n += ev["L"]
             global_step += 1
@@ -540,11 +717,16 @@ def train(cfg: Cfg) -> None:
 
         # Val
         val = evaluate(backbone, head, cache, val_plan, cfg.max_len, device, amp_dtype,
-                       thresholds, cfg.feature_mode)
+                       thresholds, cfg.feature_mode, cfg.head_mode)
+        aux_msg = ""
+        if cfg.head_mode == "multi":
+            train_aux_acc = aux_correct / max(1, aux_total)
+            aux_msg = (f"  [aux: train_loss {ep_aux / max(1, aux_total):.3f} "
+                       f"acc {train_aux_acc:.2f}  val_pos_prob {val['aux_prob_mean']:.2f}]")
         print(f"  epoch {ep:>2}  train_loss {train_loss:.4f}  "
               f"VAL F1 {val['best']['f1']:.3f} @ thr={val['best']['thr']:.2f}  "
               f"P {val['best']['precision']:.3f}  R {val['best']['recall']:.3f}  "
-              f"({elapsed:.0f}s train, {val['elapsed_s']:.0f}s val)", flush=True)
+              f"({elapsed:.0f}s train, {val['elapsed_s']:.0f}s val){aux_msg}", flush=True)
 
         history["epochs"].append({
             "epoch": ep, "train_loss": train_loss,
@@ -552,6 +734,10 @@ def train(cfg: Cfg) -> None:
             "val_precision": val["best"]["precision"],
             "val_recall": val["best"]["recall"],
             "elapsed_s": elapsed,
+            **({"train_aux_loss": ep_aux / max(1, aux_total),
+                "train_aux_acc": aux_correct / max(1, aux_total),
+                "val_aux_pos_prob": val["aux_prob_mean"]}
+               if cfg.head_mode == "multi" else {}),
         })
 
         ck_state = {"head_state": head.state_dict(), "optim_state": optim.state_dict(),
@@ -598,9 +784,17 @@ def main():
     ap.add_argument("--snapshots-dir", type=Path, default=Path("models_test/m3d_snapshots"))
     ap.add_argument("--history-out", type=Path, default=Path("models_test/m3d_history.json"))
     ap.add_argument("--log-every", type=int, default=200)
+    ap.add_argument("--head-mode", choices=["single", "multi"], default="single",
+                    help="single = v2 BP-only head; multi = v4 BP head + aux "
+                         "'is recombinant?' gate head")
+    ap.add_argument("--lambda-aux", type=float, default=0.5,
+                    help="weight on the aux BCE term (multi head only)")
     ap.add_argument("--neg-frac", type=float, default=0.0,
                     help="fraction of training steps that use a negative-control "
-                         "triplet (real virus panel, no recombination)")
+                         "triplet (no recombination, BP loss skipped)")
+    ap.add_argument("--neg-santa-frac", type=float, default=0.6,
+                    help="of each negative step, fraction that is a SANTA-internal "
+                         "non-recombinant triplet (vs a real-virus-panel triplet)")
     ap.add_argument("--neg-panels", nargs="+",
                     default=["ebola", "zika", "sarscov2_full"],
                     help="real virus panels to source negative triplets from")
@@ -615,6 +809,8 @@ def main():
         head_hidden=args.head_hidden, head_blocks=args.head_blocks,
         head_dropout=args.head_dropout, backbone_mode=args.backbone_mode,
         feature_mode=args.feature_mode,
+        head_mode=args.head_mode, lambda_aux=args.lambda_aux,
+        neg_santa_frac=args.neg_santa_frac,
         ckpt_in=args.ckpt_in, ckpt_out=args.ckpt_out,
         snapshots_dir=args.snapshots_dir, history_out=args.history_out,
         log_every=args.log_every,
