@@ -38,7 +38,7 @@ The Phase 1-4 plan below was written under the assumption that **MLM pretraining
 **Active questions for next session:**
 - ~~Does a fix for Ebola exist that doesn't regress LANL?~~ **Answered:** the M3 v4 divergence gate (not a learned classifier, not training-mix negatives). Ebola resolved.
 - Can we push LANL F1 past classical RDP (>0.519) with more data diversity (not just more of the same)? **Now the top open lever** (writeup §8.2).
-- Build the deployment CLI (`bp_detect <fasta>`): wrap v2 detector + `m3_divergence_gate.py`. The gate is done; the CLI wrapper is ~3-4h.
+- ~~Build the deployment CLI (`bp_detect <fasta>`).~~ **Done:** `bp_detect.py` wraps `M3GatedDetector` (v2 BP head + divergence gate). Takes an aligned 3-seq FASTA → per-position probability track (`.track.tsv`), breakpoint calls (`.peaks.tsv`), recombinant-confidence + OOD warning (`.json`). Validated on LANL (trusted, 5 peaks), XBB (trusted, peak at 22870), Ebola cross-species (gated, 10 raw FPs → 0 + warning).
 - Expand the positive multi-virus eval set (XBC/XAY SARS lineages, HCV, HPV) to strengthen the cross-lineage claim beyond XBB.1.5.
 
 ---

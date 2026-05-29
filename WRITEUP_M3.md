@@ -218,6 +218,16 @@ python3 -u m3_eval_multivirus_v2.py --ckpt models_test/m3d_big_snaps/m3d_best.pt
 
 Wall time on a single RTX 3070: ~2.5 hours training, <2 minutes evaluation.
 
+Deployment (M3 v4, no training needed — wraps the v2 checkpoint):
+
+```bash
+# aligned 3-sequence FASTA (recombinant first, then 2 candidate parents)
+python3 bp_detect.py triplet.fa --out-prefix result
+#  → result.track.tsv (per-position P(breakpoint)), result.peaks.tsv (calls),
+#    result.json (calls + recombinant-confidence + out-of-distribution warning)
+# cross-species inputs (div_max > 0.20) are flagged OOD and their peaks suppressed.
+```
+
 ## 8. Future work
 
 1. ~~Multi-head / divergence-anomaly cross-species safety.~~ **Done (§4.4–4.5):** the learned aux head failed; the unsupervised divergence gate (M3 v4) resolves the Ebola failure (98% suppressed) with no LANL/XBB regression. **Follow-up:** validate the 0.20 threshold on more-divergent CRFs (D/G/J-containing, `div_max` ~0.15–0.18) to confirm it doesn't suppress genuine highly-divergent within-species recombinants.
@@ -226,7 +236,7 @@ Wall time on a single RTX 3070: ~2.5 hours training, <2 minutes evaluation.
 
 3. **Additional positive multi-virus test cases.** Curate confirmed cross-lineage recombinants beyond XBB.1.5 — XBC, XAY, XAS lineages of SARS-CoV-2; HCV inter-genotype recombinants; HPV cross-type recombinants. Build a broader positive eval set.
 
-4. **Deployment package.** Wrap M3 as a CLI tool that takes a 3-sequence FASTA and emits a per-position probability track + peak calls. The divergence-aware warning system is already built (`m3_divergence_gate.py`); the CLI just needs to wrap the v2 detector + gate.
+4. ~~Deployment package.~~ **Done:** `bp_detect.py` is the CLI — an aligned 3-sequence FASTA in, a per-position probability track + breakpoint calls + recombinant-confidence/OOD warning out (TSV + JSON), built on `M3GatedDetector`. Remaining polish: optional built-in alignment (MAFFT), and a four-way "which sequence is the recombinant" mode (currently the recombinant is specified, per the project's current framing).
 
 ## Appendix A: Project chronology
 
