@@ -1,15 +1,15 @@
 # Sequence-only viral recombination breakpoint detection
 
-**Status:** results writeup, 2026-05-28
-**Author:** Josh Cullinan + Claude (Opus 4.7)
-**Source:** worktree `m12-mlm`, commits up to `be6274b`
-**Best model:** `models_test/m3d_big_snaps/m3d_best.pt` (M3 v2)
+**Status:** results writeup, updated 2026-05-29
+**Author:** Josh Cullinan + Claude (Opus 4.7 / 4.8)
+**Source:** worktree `m12-mlm`
+**Best model:** `models_test/m3d_big_snaps/m3d_best.pt` (M3 v2 detector) + `m3_divergence_gate.py` (M3 v4 cross-species gate)
 
 ---
 
 ## Abstract
 
-We present **M3**, a per-position breakpoint detector for aligned virus triplets `(recombinant, parent1, parent2)` that operates on **nucleotide sequence alone** — no precomputed RDP / GeneConv / MaxChi method outputs. M3 achieves aggregate **F1 = 0.509** on the LANL HIV circulating-recombinant-form (CRF) panel — within 0.010 of standalone classical RDP (F1 = 0.519) and substantially above the previous sequence-only baseline (legacy CNN's `runOH` variant: F1 = 0.000). The same model, trained only on HIV-flavored simulated data, correctly localizes the **SARS-CoV-2 XBB.1.5 recombination breakpoint to within 293 bp** of the documented literature truth at nt 22577. It also stays clean on no-recombination Zika triplets (0.41 false peaks per triplet) and shows 1.81× enrichment for peaks in the SARS-CoV-2 Spike gene — exactly where SARS-CoV-2 recombination biology occurs. A known failure mode — cross-species Ebola triplets at ~30% pairwise divergence — produces 5.2 false peaks per triplet and is documented as a limitation. An attempted fix (training-mix negative controls at 15% rate) caused catastrophic collapse and is not deployed.
+We present **M3**, a per-position breakpoint detector for aligned virus triplets `(recombinant, parent1, parent2)` that operates on **nucleotide sequence alone** — no precomputed RDP / GeneConv / MaxChi method outputs. M3 achieves aggregate **F1 = 0.509** on the LANL HIV circulating-recombinant-form (CRF) panel — within 0.010 of standalone classical RDP (F1 = 0.519) and substantially above the previous sequence-only baseline (legacy CNN's `runOH` variant: F1 = 0.000). The same model, trained only on HIV-flavored simulated data, correctly localizes the **SARS-CoV-2 XBB.1.5 recombination breakpoint to within 293 bp** of the documented literature truth at nt 22577. It also stays clean on no-recombination Zika triplets (0.41 false peaks per triplet) and shows 1.81× enrichment for peaks in the SARS-CoV-2 Spike gene — exactly where SARS-CoV-2 recombination biology occurs. The one cross-species failure mode — Ebola triplets at ~30% pairwise divergence producing 5.2 false peaks per triplet — is **resolved in M3 v4** by an unsupervised divergence-anomaly gate that flags out-of-distribution (cross-species) triplets and suppresses their peaks. The gate cuts Ebola false peaks to **0.04 per triplet (98% suppressed)** while leaving LANL F1 (0.509), the XBB localization (Δ=293 bp), and Zika unchanged (gate AUROC 0.982). Two fixes that did *not* work first — training-mix negative controls (v3, catastrophic collapse) and a learned recombinant-classifier head (v4a, became a simulator-vs-real detector that suppressed real recombinants) — are documented as instructive negatives.
 
 ---
 
@@ -150,6 +150,29 @@ A documented failure mode: cross-species Ebola triplets (Zaire / Sudan / Bundibu
 
 An attempted fix injected 15% cross-species negative-control triplets (random sequences from real-virus reference panels, target = all zeros) into the M3 training mix. Result: catastrophic collapse. VAL F1 dropped from 0.602 to 0.203 by epoch 1; recall fell below 0.05. **LANL aggregate F1 collapsed from 0.509 to 0.000** — the model learned "any divergent input → predict zero," which generalized to legitimate HIV inter-subtype recombinants. The 15% rate was too aggressive; the negative-control panels (~30% divergence) overlap in feature space with HIV inter-subtype CRFs (~10-15%). Memory file: `project_m3_v3_failed.md`.
 
+### 4.4 Learned recombinant-classifier head (M3 v4a)
+
+To avoid v3's mistake of pushing the BP head toward zero, v4a kept the per-position BP head and added a separate **auxiliary head** ("is this triplet a recombinant?") whose confidence *gates* the BP output. The intent: decouple *where* a breakpoint is from *whether* the triplet is a recombinant at all, and suppress peaks only when the aux head is unconfident.
+
+Two architecture defects were diagnosed and fixed along the way: multi-task interference (the aux gradient degraded the shared trunk, regressing LANL F1 to 0.402 — fixed by freezing the v2 trunk and training only the aux head, which restored LANL to 0.509), and aux-head saturation (max-pooling the unnormalized residual stream produced logit ≈ −75 for every input — fixed with LayerNorm). To prevent the obvious provenance shortcut, the negative set mixed real-virus panels with **SANTA-internal non-recombinant triplets** (three non-recombinant sequences from one alignment), putting simulated data on both sides of the label.
+
+It still failed — for a deeper reason. With the trunk frozen and the aux head un-saturated, the aux head became a clean **simulator-vs-real detector**: it scored SANTA recombinants 0.97 but *every real recombinant* ~0 (LANL 0.015 — two CRFs exactly 0.000; SARS-CoV-2 XBB 0.000), indistinguishable from cross-species Ebola (0.000). The SANTA-vs-real AUROC was 1.000. The cause is fundamental: when every *positive* training example is a SANTA recombinant and the features carry any provenance signal, a learned classifier cannot generalize "recombinant-ness" to *real* recombinants — they are out of distribution on the positive side. A learned gate is the wrong tool. Memory: `project_m3_v4_multihead.md`.
+
+### 4.5 What worked: the unsupervised divergence gate (M3 v4)
+
+The signal that actually separates the cases needs no training and carries no provenance. Within-species recombinants sit at low pairwise divergence (HIV subtype CRFs `div_max` 0.131–0.138, SARS-CoV-2 lineages ~0.002, Zika strains ≤0.113); cross-species Ebola sits far higher (mean 0.371). M3 v4 therefore gates on `div_max` directly: a triplet whose maximum pairwise divergence exceeds **0.20** is flagged as a likely cross-species comparison (outside the training regime) and its peaks are suppressed with a warning. The BP detector is the deployed v2 model, unchanged; the gate is a thin post-hoc wrapper (`m3_divergence_gate.py`).
+
+Four-criteria validation (`m3_eval_divgate.py`, threshold 0.20):
+
+| Criterion | Target | M3 v4 | |
+|---|---|---|---|
+| LANL F1 (gated) | ≥ 0.49 | **0.509** | ✓ (all CRFs `div_max`≈0.13 < 0.20 → kept) |
+| Ebola peaks @0.8 (gated) | ≤ 1.5 | **0.04** | ✓ (was 5.16; 98% of Ebola gated) |
+| SARS-CoV-2 XBB | detected ≤500 bp | **Δ=293 bp, kept** | ✓ (`div_max`=0.002) |
+| gate AUROC (LANL vs Ebola) | ≥ 0.85 | **0.982** | ✓ |
+
+Because divergence is intrinsic to the triplet, the gate generalizes by construction rather than by training: any within-species comparison (the regime M3 was trained for) passes, any cross-*species* comparison (which M3 was never meant to handle) is flagged. Low-divergence same-strain Ebola pairs correctly pass the gate — they are not the failure mode. This is the divergence-aware warning system anticipated in earlier future-work notes, now implemented and validated.
+
 ## 5. Discussion
 
 **The legacy 22-channel feature engineering carries the breakpoint signal.** Hand-crafted match flags and windowed parental disparity at multiple scales encode exactly the cross-sequence comparison information a per-position breakpoint detector needs. Pretrained sequence embeddings (HyenaDNA, NT) do not — they encode context-invariant nucleotide statistics, which destroy the discriminative signal. This is consistent with classical methods' design: RDP, MaxChi, GeneConv all operate on raw pairwise mismatch patterns, not learned representations.
@@ -160,7 +183,7 @@ An attempted fix injected 15% cross-species negative-control triplets (random se
 
 ## 6. Limitations
 
-1. **Cross-species comparisons (>25% divergence) produce many false positives.** Not deployment-safe for Ebola Zaire vs Sudan analyses. A multi-head architecture with an auxiliary recombinant-classifier or a gentler negative-control training mix may fix this; the aggressive fix attempted (§4.3) failed.
+1. **Cross-species comparisons (>25% divergence) are handled by gating, not detection.** The raw BP detector produces false positives on cross-species triplets; M3 v4's divergence gate (§4.5) flags and suppresses these (Ebola 5.16 → 0.04 peaks). The model thus *declines* on cross-species input rather than detecting recombination within it — appropriate, since SANTA never trained it on >25% divergence. Detecting genuine cross-species recombination (if biologically meaningful) would require training data in that regime. The gate threshold (0.20) is a divergence-regime boundary chosen from the reference panels; it sits with margin between within-species recombinants (~0.13) and cross-species Ebola (~0.37).
 
 2. **LANL F1 0.509 is within sampling noise of classical RDP 0.519** — we match the standalone classical baseline but don't yet beat it. The legacy fusion CNN at 0.533 (with RDP outputs as inputs) remains the deployment number to beat for HIV.
 
@@ -195,15 +218,13 @@ Wall time on a single RTX 3070: ~2.5 hours training, <2 minutes evaluation.
 
 ## 8. Future work
 
-1. **Multi-head architecture for cross-species safety.** An auxiliary "is this a recombinant?" classifier (single output per triplet) trained alongside the per-position BP head. The classifier output gates the BP predictions. Decouples the within-species recombination detection from the cross-species suppression.
+1. ~~Multi-head / divergence-anomaly cross-species safety.~~ **Done (§4.4–4.5):** the learned aux head failed; the unsupervised divergence gate (M3 v4) resolves the Ebola failure (98% suppressed) with no LANL/XBB regression.
 
-2. **Per-position weighted negative training.** Instead of 15% full negative events, weight every position by a "divergence-anomaly score" that downweights positions where all three sequences are uniformly divergent. Preserves positive signal while encoding the divergence-aware prior.
+2. **Push LANL past 0.519 with more diverse SANTA data.** Try unfiltered training with all XML shards plus a subset of long_content_30k_* data (re-checking that the cross-shard contamination concern is manageable). This is now the most promising lever for a clear win over classical RDP.
 
-3. **Push LANL past 0.519 with more diverse SANTA data.** Try unfiltered training with all XML shards plus a subset of long_content_30k_* data (re-checking that the cross-shard contamination concern is manageable).
+3. **Additional positive multi-virus test cases.** Curate confirmed cross-lineage recombinants beyond XBB.1.5 — XBC, XAY, XAS lineages of SARS-CoV-2; HCV inter-genotype recombinants; HPV cross-type recombinants. Build a broader positive eval set.
 
-4. **Additional positive multi-virus test cases.** Curate confirmed cross-lineage recombinants beyond XBB.1.5 — XBC, XAY, XAS lineages of SARS-CoV-2; HCV inter-genotype recombinants; HPV cross-type recombinants. Build a broader positive eval set.
-
-5. **Deployment package.** Wrap M3 as a CLI tool that takes a 3-sequence FASTA and emits a per-position probability track + peak calls. Pair with a divergence-aware warning system that flags cross-species inputs as potentially unreliable.
+4. **Deployment package.** Wrap M3 as a CLI tool that takes a 3-sequence FASTA and emits a per-position probability track + peak calls. The divergence-aware warning system is already built (`m3_divergence_gate.py`); the CLI just needs to wrap the v2 detector + gate.
 
 ## Appendix A: Project chronology
 
@@ -215,6 +236,7 @@ Wall time on a single RTX 3070: ~2.5 hours training, <2 minutes evaluation.
 - **2026-05-27:** Pivot back to legacy CNN architecture in PyTorch. M3 v1 (5k events) hits LANL F1 0.409 — the first working sequence-only baseline. M3 v2 (20k events, pos_weight=70) hits **LANL F1 0.509**. M3 XL (50k events, 40 epochs) overfits and drops to 0.434.
 - **2026-05-27:** Multi-virus eval. SARS-CoV-2 XBB hit at Δ=293 bp. Zika clean. Ebola failure characterized.
 - **2026-05-28:** SARS-CoV-2 peak position analysis reveals 1.81× Spike enrichment — half the "false positives" are real biology. Edge-buffer fix lands. M3 v3 (cross-species negatives) attempted, catastrophically fails.
+- **2026-05-29:** M3 v4a (learned recombinant-classifier head with SANTA-internal negatives, frozen v2 trunk, LayerNorm) fails — becomes a simulator-vs-real detector that scores real recombinants like cross-species negatives. M3 v4 (unsupervised divergence gate, `div_max>0.20`) resolves the Ebola failure: all four success criteria pass (LANL 0.509, Ebola 0.04 peaks, XBB Δ=293 kept, gate AUROC 0.982).
 - **2026-05-28 (this writeup):** Documentation consolidated.
 
 ## Appendix B: Repository structure

@@ -1,6 +1,6 @@
 # Master plan — sequence-only backbone replacement
 
-**Status:** active, written 2026-05-18. **Reality update 2026-05-28.**
+**Status:** active, written 2026-05-18. **Reality update 2026-05-29.**
 **Audience:** future agents (Claude or otherwise) and the human collaborator.
 
 ---
@@ -27,16 +27,19 @@ The Phase 1-4 plan below was written under the assumption that **MLM pretraining
 | M3 XL: 50k × 40 epochs | 2026-05-27 | Overfit to SANTA, LANL 0.434 (worse than v2) |
 | SARS-CoV-2 peak analysis | 2026-05-28 | Half the "FPs" are real Spike-hotspot signals (1.81× enrichment) |
 | Multi-virus v2 (edge_buffer=200) | 2026-05-28 | Zika 1.5→0.41 peaks, SARS 3.3→2.1, Ebola unchanged |
-| **M3 v3: + neg_frac=0.15 cross-species negatives** | **2026-05-28** | **IN PROGRESS** (background job, ~2.5h ETA) |
+| M3 v3: + neg_frac=0.15 cross-species negatives | 2026-05-28 | **FAILED** — LANL 0.509→0.000 (BP learned "divergent→zero") |
+| M3 v4a: learned aux recombinant-gate head | 2026-05-29 | **FAILED** — became simulator-vs-real detector; scores real recombinants (LANL/XBB) ~0 like Ebola (CONFOUND AUROC 1.000) |
+| **M3 v4: unsupervised divergence gate (`div_max>0.20`)** | **2026-05-29** | **✅ ALL CRITERIA PASS** — LANL 0.509, Ebola peaks 5.16→0.04, XBB kept Δ=293, gate AUROC 0.982 |
 
-**Current best model:** `models_test/m3d_big_snaps/m3d_best.pt` (M3 v2, dilated CNN, raw 22ch input, LANL F1 0.509).
+**Current best model:** `models_test/m3d_big_snaps/m3d_best.pt` (M3 v2 detector, LANL F1 0.509) **+ `m3_divergence_gate.py`** (M3 v4 cross-species gate). Validate with `m3_eval_divgate.py`. The Ebola failure mode is RESOLVED.
 
 **The original Phase 1-4 plan below is retained as historical context but is NOT the active plan.** New work iterates from M3 v2 outcomes (memory files: `project_m3_lanl_v2.md`, `project_m3_multivirus.md`, `project_m3_multivirus_v2.md`, `project_m3_sars_peaks_analysis.md`).
 
 **Active questions for next session:**
-- Does M3 v3 (cross-species negatives) fix Ebola without regressing LANL?
-- Can we push LANL F1 past classical RDP (>0.519) with more data diversity (not just more of the same)?
-- Should we expand multi-virus deployment claim — currently HIV (LANL 0.509) + SARS-CoV-2 XBB (Δ=293bp).
+- ~~Does a fix for Ebola exist that doesn't regress LANL?~~ **Answered:** the M3 v4 divergence gate (not a learned classifier, not training-mix negatives). Ebola resolved.
+- Can we push LANL F1 past classical RDP (>0.519) with more data diversity (not just more of the same)? **Now the top open lever** (writeup §8.2).
+- Build the deployment CLI (`bp_detect <fasta>`): wrap v2 detector + `m3_divergence_gate.py`. The gate is done; the CLI wrapper is ~3-4h.
+- Expand the positive multi-virus eval set (XBC/XAY SARS lineages, HCV, HPV) to strengthen the cross-lineage claim beyond XBB.1.5.
 
 ---
 
