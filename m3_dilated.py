@@ -212,6 +212,14 @@ class M3MultiHead(nn.Module):
                 nn.Dropout1d(dropout),
             ))
         self.bp_head = nn.Conv1d(hidden, 1, kernel_size=1)
+        # LayerNorm each trunk pool BEFORE the aux MLP. The trunk's residual
+        # stream (h = h + block(h), unnormalized) grows to large magnitudes, so
+        # raw mean/max pools would otherwise saturate the aux head (observed:
+        # logit ≈ -75 for every input). LayerNorm bounds the scale and keeps the
+        # relative structure. raw_mean is already bounded (channel means), so it
+        # is fed un-normalized.
+        self.mean_norm = nn.LayerNorm(hidden)
+        self.max_norm = nn.LayerNorm(hidden)
         self.aux_head = nn.Sequential(
             nn.Linear(2 * hidden + in_channels, hidden),
             nn.GELU(),
@@ -230,8 +238,8 @@ class M3MultiHead(nn.Module):
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         h = self.trunk(x)                       # (B, hidden, L)
         bp_logits = self.bp_head(h).squeeze(1)              # (B, L)
-        mean_pool = h.mean(dim=-1)                          # (B, hidden)
-        max_pool = h.amax(dim=-1)                           # (B, hidden)
+        mean_pool = self.mean_norm(h.mean(dim=-1))          # (B, hidden)
+        max_pool = self.max_norm(h.amax(dim=-1))            # (B, hidden)
         raw_mean = x.mean(dim=1).to(mean_pool.dtype)        # (B, C_in) — over L
         pooled = torch.cat([mean_pool, max_pool, raw_mean], dim=-1)  # (B, 2H+C)
         aux_logit = self.aux_head(pooled).squeeze(-1)       # (B,)
@@ -246,6 +254,39 @@ def build_head(head_mode: str, feat_dim: int, hidden: int, blocks: int,
     if head_mode == "single":
         return DilatedHead(feat_dim, hidden, blocks, dropout=dropout)
     raise ValueError(head_mode)
+
+
+def load_and_freeze_trunk(head: "M3MultiHead", v2_ckpt: Path, device: str) -> None:
+    """Initialise an M3MultiHead's trunk + BP head from a v2 single-head
+    (DilatedHead) checkpoint and FREEZE them. This guarantees the BP detector is
+    byte-identical to the deployed v2 model (LANL F1 0.509) — no multi-task
+    interference is possible — so training touches only the aux gate head.
+
+    DilatedHead state keys: proj.*, blocks.*, head.*  → M3MultiHead expects
+    proj.*, blocks.*, bp_head.*  (head.→bp_head.). aux_head/*_norm stay random.
+    """
+    ck = torch.load(v2_ckpt, map_location=device, weights_only=False)
+    v2_state = ck["head_state"]
+    remapped = {}
+    for k, v in v2_state.items():
+        remapped[("bp_head." + k[len("head."):]) if k.startswith("head.") else k] = v
+    missing, unexpected = head.load_state_dict(remapped, strict=False)
+    # The only keys that should be missing are the aux head + pool norms.
+    trunk_missing = [m for m in missing
+                     if not (m.startswith("aux_head") or m.endswith("_norm.weight")
+                             or m.endswith("_norm.bias"))]
+    if trunk_missing or unexpected:
+        raise RuntimeError(f"v2 trunk load mismatch: missing={trunk_missing} "
+                           f"unexpected={unexpected}")
+    frozen = 0
+    for name, p in head.named_parameters():
+        if name.startswith("aux_head") or name.startswith("mean_norm") \
+                or name.startswith("max_norm"):
+            continue
+        p.requires_grad = False
+        frozen += p.numel()
+    print(f"  froze v2 trunk+BP from {v2_ckpt} (ep={ck.get('epoch')}): "
+          f"{frozen:,} params frozen; training aux head only", flush=True)
 
 
 # ---------- feature extraction (frozen backbone) ----------
@@ -529,6 +570,9 @@ class Cfg:
     feature_mode: str         # 'hyena' | 'raw' | 'combined'
     head_mode: str            # 'single' (v2) | 'multi' (v4: + aux gate head)
     lambda_aux: float         # weight on the aux "is recombinant?" BCE term
+    freeze_trunk_from: str    # if set, path to a v2 ckpt: load its trunk+BP and
+                              # FREEZE them, training only the aux gate head
+                              # (guarantees no BP regression). "" = co-train.
     neg_santa_frac: float     # of each NEGATIVE step, fraction that is a
                               # SANTA-internal non-recombinant triplet (vs a
                               # real-virus-panel triplet). Breaks the
@@ -589,12 +633,15 @@ def train(cfg: Cfg) -> None:
                       cfg.head_blocks, cfg.head_dropout).to(device)
     print(f"  feature_mode={cfg.feature_mode}  feat_dim={feat_dim}  "
           f"head_mode={cfg.head_mode}", flush=True)
+    frozen_trunk = bool(cfg.freeze_trunk_from) and cfg.head_mode == "multi"
+    if frozen_trunk:
+        load_and_freeze_trunk(head, Path(cfg.freeze_trunk_from), device)
+    trainable = [p for p in head.parameters() if p.requires_grad]
+    n_train_p = sum(p.numel() for p in trainable)
     n_head = sum(p.numel() for p in head.parameters())
-    n_bb = sum(p.numel() for p in backbone.parameters()) if backbone is not None else 0
-    print(f"  backbone params (frozen): {n_bb:,}  head params (trainable): {n_head:,}",
-          flush=True)
+    print(f"  head params total: {n_head:,}  trainable: {n_train_p:,}", flush=True)
 
-    optim = torch.optim.AdamW(head.parameters(), lr=cfg.lr, weight_decay=0.01)
+    optim = torch.optim.AdamW(trainable, lr=cfg.lr, weight_decay=0.01)
     amp_dtype = torch.bfloat16 if cfg.bf16 else torch.float16
     print(f"  AMP dtype: {amp_dtype}", flush=True)
 
@@ -681,13 +728,14 @@ def train(cfg: Cfg) -> None:
                     bp_logits = bp_logits.squeeze(0)     # (L,)
                     aux_logit = aux_logit.squeeze(0)     # scalar
                     # BP loss only on POSITIVES — never push BP→0 on negatives
-                    # (that was the v3 failure). Negatives shape the trunk only
-                    # via the aux gradient.
-                    if is_recomb:
+                    # (that was the v3 failure). When the trunk is frozen the BP
+                    # head has no trainable params, so skip the BP loss entirely
+                    # (the frozen trunk is auto-detached → aux trains alone).
+                    if frozen_trunk or not is_recomb:
+                        l_bp = bp_logits.new_zeros(())
+                    else:
                         l_bp = F.binary_cross_entropy_with_logits(
                             bp_logits, y, pos_weight=pw)
-                    else:
-                        l_bp = bp_logits.new_zeros(())
                     aux_tgt = aux_logit.new_full((), float(is_recomb))
                     l_aux = F.binary_cross_entropy_with_logits(aux_logit, aux_tgt)
                     loss = l_bp + cfg.lambda_aux * l_aux
@@ -695,7 +743,7 @@ def train(cfg: Cfg) -> None:
                     logits = head(feats[None]).squeeze(0)   # (L,)
                     loss = F.binary_cross_entropy_with_logits(logits, y, pos_weight=pw)
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(head.parameters(), cfg.grad_clip)
+            torch.nn.utils.clip_grad_norm_(trainable, cfg.grad_clip)
             optim.step()
 
             if cfg.head_mode == "multi":
@@ -789,6 +837,9 @@ def main():
                          "'is recombinant?' gate head")
     ap.add_argument("--lambda-aux", type=float, default=0.5,
                     help="weight on the aux BCE term (multi head only)")
+    ap.add_argument("--freeze-trunk-from", type=str, default="",
+                    help="path to a v2 single-head ckpt; load its trunk+BP and "
+                         "FREEZE them, training only the aux gate head (multi)")
     ap.add_argument("--neg-frac", type=float, default=0.0,
                     help="fraction of training steps that use a negative-control "
                          "triplet (no recombination, BP loss skipped)")
@@ -810,6 +861,7 @@ def main():
         head_dropout=args.head_dropout, backbone_mode=args.backbone_mode,
         feature_mode=args.feature_mode,
         head_mode=args.head_mode, lambda_aux=args.lambda_aux,
+        freeze_trunk_from=args.freeze_trunk_from,
         neg_santa_frac=args.neg_santa_frac,
         ckpt_in=args.ckpt_in, ckpt_out=args.ckpt_out,
         snapshots_dir=args.snapshots_dir, history_out=args.history_out,
