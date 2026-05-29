@@ -171,7 +171,7 @@ Four-criteria validation (`m3_eval_divgate.py`, threshold 0.20):
 | SARS-CoV-2 XBB | detected ≤500 bp | **Δ=293 bp, kept** | ✓ (`div_max`=0.002) |
 | gate AUROC (LANL vs Ebola) | ≥ 0.85 | **0.982** | ✓ |
 
-Because divergence is intrinsic to the triplet, the gate generalizes by construction rather than by training: any within-species comparison (the regime M3 was trained for) passes, any cross-*species* comparison (which M3 was never meant to handle) is flagged. Low-divergence same-strain Ebola pairs correctly pass the gate — they are not the failure mode. This is the divergence-aware warning system anticipated in earlier future-work notes, now implemented and validated.
+Two honest caveats. (i) The *mechanism* is provenance-invariant, but the **0.20 threshold is calibrated** on these reference panels — it sits between the tested HIV CRFs (`div_max` 0.131–0.138) and cross-species Ebola (~0.37). The tested CRFs (AG/BC/BF) are on the *low* end of the HIV recombinant space; genome-wide inter-subtype divergence for more divergent pairs (e.g. anything involving subtypes D/G/J) can reach ~0.15–0.18, approaching the boundary, so a genuine recombinant of highly divergent subtypes could be wrongly suppressed. The gate explicitly trades recall on very-divergent within-species recombinants for cross-species safety; validating the threshold on D/G-containing CRFs is the top follow-up. (ii) The criterion-4 AUROC (0.982) is a threshold on `div_max` evaluated on the same variable used to set the gate, so it is a *contrast* against the learned-feature AUROC (0.74) — evidence that divergence separates the groups where learned features did not — not an independent confirmation. The real basis is the biological divergence-regime argument, not that number. The overlap region is real and handled correctly: a few low-divergence same-strain Ebola pairs (`div_max` as low as 0.03, within the LANL range) pass the gate — they are not the cross-species failure mode and produce few peaks anyway. So 0.20 is a calibrated regime boundary, not a clean linear separator. Note also that v4 is the deployed v2 detector plus a **non-ML divergence prefilter**: the frozen-trunk/LayerNorm work (§4.4) was the diagnostic that *proved* a learned gate cannot make this distinction; the shipped gate uses none of it and would wrap any detector identically.
 
 ## 5. Discussion
 
@@ -218,7 +218,7 @@ Wall time on a single RTX 3070: ~2.5 hours training, <2 minutes evaluation.
 
 ## 8. Future work
 
-1. ~~Multi-head / divergence-anomaly cross-species safety.~~ **Done (§4.4–4.5):** the learned aux head failed; the unsupervised divergence gate (M3 v4) resolves the Ebola failure (98% suppressed) with no LANL/XBB regression.
+1. ~~Multi-head / divergence-anomaly cross-species safety.~~ **Done (§4.4–4.5):** the learned aux head failed; the unsupervised divergence gate (M3 v4) resolves the Ebola failure (98% suppressed) with no LANL/XBB regression. **Follow-up:** validate the 0.20 threshold on more-divergent CRFs (D/G/J-containing, `div_max` ~0.15–0.18) to confirm it doesn't suppress genuine highly-divergent within-species recombinants.
 
 2. **Push LANL past 0.519 with more diverse SANTA data.** Try unfiltered training with all XML shards plus a subset of long_content_30k_* data (re-checking that the cross-shard contamination concern is manageable). This is now the most promising lever for a clear win over classical RDP.
 
