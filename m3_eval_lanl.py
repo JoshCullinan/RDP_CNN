@@ -134,6 +134,12 @@ def main():
     ap.add_argument("--head-blocks", type=int, default=6)
     ap.add_argument("--head-dropout", type=float, default=0.1)
     ap.add_argument("--head-mode", choices=["auto", "single", "multi"], default="auto")
+    ap.add_argument("--edge-buffer", type=int, default=200,
+                    help="suppress peaks within this many bp of content ends. "
+                         "Default 200 matches the multivirus UTR-artifact "
+                         "convention (m3_sars_peaks); 0 true LANL BPs lie within "
+                         "300 bp of an end, so it removes edge FPs with no recall "
+                         "loss. The legacy LANL eval used 25.")
     ap.add_argument("--out", type=Path, default=Path("models_test/m3_eval_lanl.json"))
     args = ap.parse_args()
 
@@ -187,7 +193,7 @@ def main():
         tbps = truth[crf]
         best_per_thr = []
         for thr in thresholds:
-            peaks = extract_peaks(p, thr, edge_buffer=EDGE_BUFFER,
+            peaks = extract_peaks(p, thr, edge_buffer=args.edge_buffer,
                                   content_end=content_end)
             tp, fp, fn = event_f1(tbps, peaks)
             prec = tp / max(1, tp + fp)

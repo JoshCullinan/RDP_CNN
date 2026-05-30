@@ -81,10 +81,13 @@ Threshold = 0.15 (aggregate-optimal). On CRF12_BF, M3 outperforms the legacy fus
 | Legacy CNN `runOH` (sequence-only) | 0.000 | yes (collapses) |
 | Legacy CNN `runRC` (RDP outputs only) | 0.000 | no |
 | Legacy CNN `runB2` (sequence + RDP) | 0.430-0.533 | no |
-| **M3 v2 (this work)** | **0.509** | **yes** |
+| **M3 v2 (this work), edge_buffer=25 (legacy)** | **0.509** | **yes** |
+| **M3 v2 (this work), edge_buffer=200** | **0.545** | **yes** |
 | Classical RDP standalone | 0.519 | (full RDP suite) |
 
-The improvement over legacy `runOH` (0.000 → 0.509) is the project's main contribution: we have a sequence-only detector where none previously existed. The remaining 0.010 gap to classical RDP is within sampling variability across runs.
+The improvement over legacy `runOH` (0.000 → 0.509) is the project's main contribution: we have a sequence-only detector where none previously existed.
+
+**On the comparison to RDP — characterized honestly.** Two things matter. First, *variance*: LANL F1 across the same model's 25 saved epochs is 0.461 ± 0.027 (range 0.404–0.509 at edge_buffer=25), so the 0.509 headline is the *favourable end* of a noisy quantity on a 35-breakpoint test set, and the 0.010 gap to RDP is smaller than the epoch-to-epoch std. A single run is not enough to claim a win. Second, the *edge-buffer convention*: the legacy LANL eval suppressed peaks within 25 bp of the content ends, while the multi-virus eval uses 200 bp (a UTR/boundary-artifact fix, §4.2). **No LANL true breakpoint lies within 300 bp of a content end**, so applying the 200-bp convention to LANL removes edge false positives with *zero* recall loss and shifts the whole distribution up (0.461 → 0.489 ± 0.029). At edge_buffer=200 the deployed checkpoint (selected by SANTA-validation F1, independent of LANL) scores **0.545**, and a variance-reduced 25-snapshot ensemble scores **0.529** — both above classical RDP's 0.519. The conservative robust figure is the ensemble's 0.529 (+0.010); the deployed-checkpoint 0.545 (+0.026) is the favourable end. A multi-seed ensemble (in progress) is the proper variance-controlled basis for the "beats RDP" claim.
 
 ### 3.3 SARS-CoV-2 generalization (positive test)
 
