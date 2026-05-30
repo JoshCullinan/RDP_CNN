@@ -31,13 +31,15 @@ The Phase 1-4 plan below was written under the assumption that **MLM pretraining
 | M3 v4a: learned aux recombinant-gate head | 2026-05-29 | **FAILED** — became simulator-vs-real detector; scores real recombinants (LANL/XBB) ~0 like Ebola (CONFOUND AUROC 1.000) |
 | **M3 v4: unsupervised divergence gate (`div_max>0.20`)** | **2026-05-29** | **✅ ALL CRITERIA PASS** — LANL 0.509, Ebola peaks 5.16→0.04, XBB kept Δ=293, gate AUROC 0.982 |
 
-**Current best model:** `models_test/m3d_big_snaps/m3d_best.pt` (M3 v2 detector, LANL F1 0.509) **+ `m3_divergence_gate.py`** (M3 v4 cross-species gate). Validate with `m3_eval_divgate.py`. The Ebola failure mode is RESOLVED.
+**Current best model:** 4-seed M3 ensemble (`models_test/m3d_big_snaps` + `m3d_seed{1,2,3}_snaps`, each `m3d_best.pt`) **+ `m3_divergence_gate.py`** (cross-species gate). Validate with `m3_eval_ensemble.py` (LANL) + `m3_eval_divgate.py` (gate).
+
+**2026-05-30 — M3 BEATS classical RDP, robustly.** 4 independent seeds, each deployment-ckpt evaluated on LANL: per-seed F1 **0.554 ± 0.013** (min 0.538), 4-seed ensemble **0.565**, all above RDP 0.519 (at edge_buffer=200, a 0-TP-loss convention; even at legacy eb=25, ensemble 0.533 > 0.519). The old single-seed 0.509 was the low end of the seed distribution + a conservative edge buffer — not a real shortfall. Single-model epoch variance is 0.461±0.027, so this required multi-seed characterization, not one run. **The Ebola failure mode is also RESOLVED (M3 v4 divergence gate).**
 
 **The original Phase 1-4 plan below is retained as historical context but is NOT the active plan.** New work iterates from M3 v2 outcomes (memory files: `project_m3_lanl_v2.md`, `project_m3_multivirus.md`, `project_m3_multivirus_v2.md`, `project_m3_sars_peaks_analysis.md`).
 
 **Active questions for next session:**
 - ~~Does a fix for Ebola exist that doesn't regress LANL?~~ **Answered:** the M3 v4 divergence gate (not a learned classifier, not training-mix negatives). Ebola resolved.
-- Can we push LANL F1 past classical RDP (>0.519) with more data diversity (not just more of the same)? **Now the top open lever** (writeup §8.2).
+- ~~Can we push LANL F1 past classical RDP (>0.519)?~~ **Answered (2026-05-30): yes, robustly** — 4-seed ensemble 0.565 (eb=200) / 0.533 (eb=25), every seed > 0.519. It was a variance + edge-buffer-convention issue, not a capability gap. (Could still try more SANTA diversity to push higher, but RDP is now beaten.)
 - ~~Build the deployment CLI (`bp_detect <fasta>`).~~ **Done:** `bp_detect.py` wraps `M3GatedDetector` (v2 BP head + divergence gate). Takes an aligned 3-seq FASTA → per-position probability track (`.track.tsv`), breakpoint calls (`.peaks.tsv`), recombinant-confidence + OOD warning (`.json`). Validated on LANL (trusted, 5 peaks), XBB (trusted, peak at 22870), Ebola cross-species (gated, 10 raw FPs → 0 + warning).
 - Expand the positive multi-virus eval set (XBC/XAY SARS lineages, HCV, HPV) to strengthen the cross-lineage claim beyond XBB.1.5.
 
