@@ -2,19 +2,45 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Current direction (May 2026) — read this first
+## Current direction (June 2026) — read this first
 
-The project pivoted **away from the Keras dilated-CNN** to a PyTorch + HyenaDNA
-sequence-only backbone, aimed at multi-virus transfer (not HIV-only).
+**Entry point is [`README.md`](README.md)** (master index + repo map), then
+[`HANDOVER_NEXT_AGENT.md`](HANDOVER_NEXT_AGENT.md) (current state + ways forward),
+then [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+[`docs/WRITEUP_M3.md`](docs/WRITEUP_M3.md).
 
-- **Active plan:** [`MASTER_PLAN.md`](MASTER_PLAN.md). M0.1–M0.5, M1.1, M1.2-pre complete; **M1.2 (MLM training loop) is next.**
-- **Active handover:** [`HANDOVER_NEXT_AGENT.md`](HANDOVER_NEXT_AGENT.md).
-- **Active backbone:** `backbone_hyenadna.py` (HyenaDNA-small-32k, PyTorch 2.6 + transformers 5.8). `backbone_mamba.py` is a record of an abandoned attempt — don't revive without system `nvcc`.
-- **Active data:** `splits/v2_filtered_split.json` (the realism-filtered split; whole-shard drops of XML-1, XML-3, long_content_30k_003 + per-combo trims). Cache is `cache/v2/` via `cache_v2_reader.CacheV2`. **Do not train on `splits/v2_split.json` going forward.**
-- **Active deployment baseline (legacy):** `models_test/cnn_breakpoint_runB2_sig10_*.keras` — LANL agg F1 0.533. The HyenaDNA work must beat this.
-- **OOM rule (non-negotiable):** never `np.array(X, copy=True)` or `X.astype(...)` on multi-GB cached tensors. Use the RSS-watchdog pattern from `m12_zeroshot_probe.py`. See `feedback_padding_mask_oom.md` in memory.
+The working detector is **M3**: a plain **dilated CNN** on a 22-channel
+parental-comparison encoding — *not* a transformer/HyenaDNA backbone (MLM
+pretraining was tried and **hurt** downstream detection; dropped). State:
 
-Pre-pivot context (the original task framing, cell IDs, iteration discipline, and the legacy Keras CNN pipeline) is preserved below for reference. Older one-shot handovers live in [`docs/handovers/archive/`](docs/handovers/archive/); pre-pivot idea/TODO queues in [`docs/archive/`](docs/archive/) — those are historical, **do not act on their recommendations.**
+- **It works.** M3 beats classical RDP on real HIV — LANL 4-seed ensemble F1
+  **0.565** (per-seed 0.554 ± 0.013, every seed > RDP 0.519). **M3 v4** adds an
+  unsupervised divergence gate that makes cross-species inputs safe (Ebola false
+  peaks 5.16 → 0.04, no loss on real recombinants). Deployment CLI is `bp_detect.py`.
+- **Active code (all at repo root, flat — sibling imports):** `m3_dilated.py`
+  (training + `DilatedHead` detector), `m3_divergence_gate.py` +
+  `m3_gated_detector.py` (v4 gate), `bp_detect.py` (CLI), `m3_eval_*.py` (evals).
+  `backbone_hyenadna.py` / `pretrain_mlm.py` are the **dead** HyenaDNA direction,
+  retained only because `m3_dilated.py` imports them at module level.
+- **Active plan / milestone log:** [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md).
+- **Data:** `cache/v2/` (int8 SANTA cache, gitignored, repo root) via
+  `cache_v2_reader.CacheV2`. `splits/v2_filtered_split.json` is the realism-filtered
+  split; **note** M3 v2/v4 actually trained on unfiltered shards XML-1..4 (val XML-5)
+  — see `docs/WRITEUP_M3.md` §2.3. Real eval panels in `data/` (lanl_crf/,
+  real_recombinants/). **Do not train on `splits/v2_split.json`.**
+- **OOM rule (non-negotiable):** never `np.array(X, copy=True)` or `X.astype(...)`
+  on multi-GB cached tensors — stream per-event. The RSS-watchdog pattern is in
+  `m3_dilated.py` (`_rss_watchdog`). See `feedback_padding_mask_oom.md` in memory.
+- **Superseded work is in [`archive/`](archive/)** (keras_era, hyenadna_era,
+  superseded_m3, phase0_audit, old_outputs) — historical, **do not act on it.**
+
+Everything below the line is **pre-pivot legacy context** (original task framing,
+the Keras CNN, cell IDs, the evaluation contract, iteration discipline). The
+evaluation contract and iteration discipline still apply; the Keras-specific
+mechanics and the `CNN.ipynb`/`run*` references now live in `archive/`. Older
+one-shot handovers are in [`docs/handovers/archive/`](docs/handovers/archive/);
+pre-pivot idea/TODO queues in [`docs/archive/`](docs/archive/) — **do not act on
+their recommendations.**
 
 ---
 
@@ -36,11 +62,11 @@ Key implications of the goal that shape what's worth trying:
 
 ## Read these first (legacy CNN context only)
 
-- The **Experiment Log** markdown cell at the end of [CNN.ipynb](CNN.ipynb) — every prior run's hypothesis, configuration, headline numbers, and verdict. The most recent entry is the legacy CNN baseline (runB2_sig10).
+- The **Experiment Log** markdown cell at the end of [CNN.ipynb](archive/keras_era/CNN.ipynb) — every prior run's hypothesis, configuration, headline numbers, and verdict. The most recent entry is the legacy CNN baseline (runB2_sig10). (Archived.)
 - [`docs/handovers/archive/HANDOVER.md`](docs/handovers/archive/HANDOVER.md) — original autonomous-iteration handover, kept for historical context.
 - [`docs/archive/TODO.md`](docs/archive/TODO.md) — pre-pivot architectural decisions log.
 
-**For current work, read [`HANDOVER_NEXT_AGENT.md`](HANDOVER_NEXT_AGENT.md) and [`MASTER_PLAN.md`](MASTER_PLAN.md) instead.**
+**For current work, read [`README.md`](README.md), [`HANDOVER_NEXT_AGENT.md`](HANDOVER_NEXT_AGENT.md) and [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md) instead.**
 
 ## Environment
 
