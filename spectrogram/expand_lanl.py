@@ -13,6 +13,7 @@ All 5 confirmed as full-genome, non-recombinant subtype references (not CRFs).
 """
 from __future__ import annotations
 
+import subprocess
 import time
 from itertools import product
 from pathlib import Path
@@ -20,10 +21,6 @@ from pathlib import Path
 from Bio import SeqIO, Entrez
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
-
-# Reuse the fetch/align helpers from build_lanl_triplets.py rather than
-# duplicating them.
-from build_lanl_triplets import fetch_genbank, mafft_align
 
 Entrez.email = 'joshcull1@gmail.com'
 
@@ -49,6 +46,33 @@ CRF_PARENTS: dict[str, tuple[str, tuple[str, str]]] = {
 SEQ_CACHE = Path('data/lanl_crf/genbank_cache')
 TRIPLET_EXPANDED_DIR = Path('data/lanl_crf/triplets_expanded')
 TMP = Path('/tmp/lanl_align_expanded')
+
+
+def fetch_genbank(acc: str, cache_dir: Path = SEQ_CACHE):
+    """Fetch one FASTA from NCBI Entrez, cache on disk. Returns a SeqRecord.
+
+    Ported from build_lanl_triplets.py's fetch_genbank (not imported) so this
+    module is self-contained and doesn't depend on the repo-root script being
+    importable."""
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache = cache_dir / f"{acc}.fa"
+    if cache.exists() and cache.stat().st_size > 0:
+        return next(SeqIO.parse(cache, 'fasta'))
+    print(f"    fetching {acc} from NCBI...", flush=True)
+    with Entrez.efetch(db='nucleotide', id=acc, rettype='fasta', retmode='text') as h:
+        text = h.read()
+    cache.write_text(text)
+    time.sleep(0.4)  # be polite to Entrez
+    return next(SeqIO.parse(cache, 'fasta'))
+
+
+def mafft_align(input_fa: Path, output_fa: Path, threads: int = 4) -> None:
+    """Run MAFFT --auto. Ported from build_lanl_triplets.py's mafft_align."""
+    cmd = ['mafft', '--auto', '--thread', str(threads), '--quiet', str(input_fa)]
+    with open(output_fa, 'w') as out:
+        proc = subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE, timeout=300, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"MAFFT failed: {proc.stderr[:500]}")
 
 
 def enumerate_pairings(crf: str) -> list[tuple[str, str, str]]:
