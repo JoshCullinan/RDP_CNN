@@ -1,6 +1,7 @@
 """Stage-1 orchestration: pre-register, power-check, diagnostics, bake-off, decide."""
 from __future__ import annotations
 import json
+import sys
 from pathlib import Path
 import numpy as np
 from spectrogram.config import BACKBONE
@@ -40,7 +41,7 @@ def run_bakeoff(santa, lanl, arms=("A0", "A1", "A2"),
     for arm in arms:
         for init in inits:
             per_correct, per_group, per_preds, per_labels = [], [], [], []
-            per_triplets, per_santa_val_acc = [], []
+            per_triplets, per_santa_val_acc, fold_accs = [], [], []
             for held, train_lanl, test_lanl in loco_folds(lanl):
                 train = santa + train_lanl
                 m = _make_model(arm, init)
@@ -49,11 +50,13 @@ def run_bakeoff(santa, lanl, arms=("A0", "A1", "A2"),
                 fit = train_model(m, tr, te, epochs=epochs)
                 preds = predict(fit["model"], te)
                 labels = np.array([te[i][1] for i in range(len(te))])
-                per_correct.append(preds == labels)
+                fold_correct = preds == labels
+                per_correct.append(fold_correct)
                 per_group.append(np.array([t.group for t in test_lanl]))
                 per_preds.append(preds)
                 per_labels.append(labels)
                 per_triplets.extend(test_lanl)
+                fold_accs.append(float(fold_correct.mean()))
                 if santa_val is not None:
                     sv = IdentificationDataset(santa_val, arm, rng_seed=2)
                     per_santa_val_acc.append(accuracy(predict(fit["model"], sv), sv))
@@ -61,6 +64,8 @@ def run_bakeoff(santa, lanl, arms=("A0", "A1", "A2"),
                 "correct": np.concatenate(per_correct),
                 "groups": np.concatenate(per_group),
                 "acc": float(np.concatenate(per_correct).mean()),
+                "fold_accs": fold_accs,
+                "mean_fold_acc": float(np.mean(fold_accs)),
                 "preds": np.concatenate(per_preds),
                 "labels": np.concatenate(per_labels),
                 "test_triplets": per_triplets,
@@ -77,21 +82,52 @@ def main(epochs=15):
     santa_train = santa[:-SANTA_VAL_N]
     power = run_power_check(lanl)
     p2 = run_p2_gate(santa[:2000])
+
+    # FIX 6 (I1): advisory gates -- warn loudly and early (before the multi-hour
+    # bake-off) so the researcher can abort a leaking/underpowered run, but this
+    # pipeline does not hard-halt on a tripped gate; the researcher decides.
+    mde = power["mde"]
+    n_test = power["n_test_triplets"]
+    underpowered = (not np.isfinite(mde)) or mde > 0.3
+    if p2["leak"]:
+        print(f"WARNING: P2 leak gate tripped (auc={p2['auc']:.3f}); confound suspected",
+              file=sys.stderr)
+    if underpowered:
+        print(f"WARNING: underpowered -- min detectable diff = {mde} on N={n_test} test triplets",
+              file=sys.stderr)
+    advisory_gates = {
+        "p2_leak": {"leak": p2["leak"], "auc": p2["auc"]},
+        "power": {"mde": mde, "n_test_triplets": n_test, "underpowered": underpowered},
+    }
+
     bake = run_bakeoff(santa_train, lanl, epochs=epochs, santa_val=santa_val)
-    a0 = bake[("A0", "floor")]
+
+    # FIX 3 (C2b): persist raw per-triplet arrays so a wrong baseline choice
+    # can be re-analyzed without re-running the GPU job.
+    raw = {f"{a}:{i}": {"preds": v["preds"].tolist(), "labels": v["labels"].tolist(),
+                        "correct": v["correct"].tolist(), "groups": v["groups"].tolist()}
+           for (a, i), v in bake.items()}
+    Path("results_spectrogram_stage1_raw.json").write_text(json.dumps(raw, indent=2))
+
     decisions = {}
     for (arm, init), r in bake.items():
         if arm == "A0":
             continue
+        # FIX 1 (C2a): compare against the SAME-init A0, isolating the
+        # representation effect (Fourier vs A0) from the init effect.
+        a0 = bake[("A0", init)]
         p = mcnemar_pvalue(r["correct"], a0["correct"])
         lo, hi = cluster_bootstrap_diff(r["correct"], a0["correct"], r["groups"])
+        # FIX 2 (M1): primary metric is mean-of-per-fold accuracy, not pooled acc.
         decisions[f"{arm}:{init}"] = {
+            "mean_fold_acc": r["mean_fold_acc"], "a0_mean_fold_acc": a0["mean_fold_acc"],
             "acc": r["acc"], "a0_acc": a0["acc"], "mcnemar_p": p,
-            "ci": [lo, hi], "win": decides_win(a0["acc"], r["acc"], p, lo, hi),
+            "ci": [lo, hi],
+            "win": decides_win(a0["mean_fold_acc"], r["mean_fold_acc"], p, lo, hi),
         }
 
-    # Winning Fourier arm (highest LOCO acc among A1/A2) gets the confound gates.
-    win_key = max((k for k in bake if k[0] in ("A1", "A2")), key=lambda k: bake[k]["acc"])
+    # Winning Fourier arm (highest mean-of-folds LOCO acc among A1/A2) gets the confound gates.
+    win_key = max((k for k in bake if k[0] in ("A1", "A2")), key=lambda k: bake[k]["mean_fold_acc"])
     win = bake[win_key]
     # Scrambled control: same arm/init, positions shuffled within each channel
     # (destroys mosaic alignment, preserves marginals) -- winning arm/init only.
@@ -112,9 +148,11 @@ def main(epochs=15):
 
     out = {"power": power, "p2_gate": p2,
            "accs": {f"{a}:{i}": v["acc"] for (a, i), v in bake.items()},
+           "mean_fold_accs": {f"{a}:{i}": v["mean_fold_acc"] for (a, i), v in bake.items()},
            "santa_val_accs": {f"{a}:{i}": v["santa_val_acc"] for (a, i), v in bake.items()},
            "decisions": decisions,
-           "diagnostics": diagnostics}
+           "diagnostics": diagnostics,
+           "advisory_gates": advisory_gates}
     Path("results_spectrogram_stage1.json").write_text(json.dumps(out, indent=2, default=float))
     return out
 

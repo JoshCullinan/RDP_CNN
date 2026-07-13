@@ -42,13 +42,19 @@ class _OwnParentsDataset(Dataset):
         return x, y
 
 def run_p2_gate(triplets, epochs=5, device=None) -> dict:
+    """Fit on a train split of triplets, report AUC on a held-out split --
+    a generalization metric, not a training-fit metric (I2)."""
     from spectrogram.models import SmallCNN
     dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-    ds = _OwnParentsDataset(triplets)
+    n_train = int(len(triplets) * 0.8)
+    train_triplets = triplets[:n_train]
+    heldout_triplets = triplets[n_train:]
+    train_ds = _OwnParentsDataset(train_triplets)
+    heldout_ds = _OwnParentsDataset(heldout_triplets)
     m = SmallCNN(in_ch=1, n_classes=2).to(dev)
     opt = torch.optim.AdamW(m.parameters(), lr=1e-4)
     lossf = torch.nn.CrossEntropyLoss()
-    dl = DataLoader(ds, batch_size=16, shuffle=True)
+    dl = DataLoader(train_ds, batch_size=16, shuffle=True)
     for _ in range(epochs):
         m.train()
         for x, y in dl:
@@ -56,7 +62,7 @@ def run_p2_gate(triplets, epochs=5, device=None) -> dict:
             opt.zero_grad(); loss = lossf(m(x), y); loss.backward(); opt.step()
     m.eval(); ys, ps = [], []
     with torch.no_grad():
-        for x, y in DataLoader(ds, batch_size=16):
+        for x, y in DataLoader(heldout_ds, batch_size=16):
             ps.append(torch.softmax(m(x.to(dev)), 1)[:, 1].cpu().numpy()); ys.append(y.numpy())
     auc = float(roc_auc_score(np.concatenate(ys), np.concatenate(ps)))
     return {"auc": auc, "leak": auc > 0.6}
