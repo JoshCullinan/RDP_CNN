@@ -18,10 +18,14 @@ def test_lanl_loads_four_crfs():
     assert len(trips) == 4                      # the 4 built CRF families
     groups = {t.group for t in trips}
     assert groups == {"CRF02_AG", "CRF07_BC", "CRF08_BC", "CRF12_BF"}
+
+    # Verify correct recombinant index per CRF
+    recomb_indices = {t.group: t.recomb_idx for t in trips}
+    assert recomb_indices == {"CRF02_AG": 0, "CRF07_BC": 2, "CRF08_BC": 0, "CRF12_BF": 0}
+
     for t in trips:
         assert isinstance(t, Triplet)
         assert t.rows.shape == (3, config.SEQ_LEN)
         assert t.rows.dtype == np.int8
-        assert t.recomb_idx in (0, 1, 2)
         assert t.source == "lanl"
         assert set(np.unique(t.rows)).issubset({0, 1, 2, 3, 4})
