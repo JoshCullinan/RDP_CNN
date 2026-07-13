@@ -3,8 +3,10 @@ int8 rows {A:0,T:1,G:2,C:3,-:4}."""
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
+import json
 import numpy as np
-from spectrogram.config import SEQ_LEN, GAP_INT, LANL_TRIPLET_DIR, LANL_TRIPLET_EXPANDED_DIR
+from spectrogram.config import (SEQ_LEN, GAP_INT, LANL_TRIPLET_DIR, LANL_TRIPLET_EXPANDED_DIR,
+                                 SANTA_SPLIT)
 
 FASTA_NT_TO_INT = {"A": 0, "T": 1, "G": 2, "C": 3, "-": GAP_INT}
 
@@ -91,4 +93,63 @@ def load_santa_triplets(cache, limit: int | None = None) -> list[Triplet]:
             out.append(Triplet(rows=rows, recomb_idx=0, source="santa", group=shard_name))
             if limit is not None and len(out) >= limit:
                 return out
+    return out
+
+def split_file_set(split_dict: dict, which: str) -> set[tuple[str, str]]:
+    """Pure helper: (shard_name, filename) pairs INCLUDED in one split arm.
+
+    `split_dict` is the parsed v2_filtered_split.json (top-level dict with a
+    "splits" key). Dropped shards / files simply have empty (or absent)
+    "files" lists and contribute nothing.
+    """
+    out: set[tuple[str, str]] = set()
+    dirs = split_dict["splits"][which]["dirs"]
+    for shard_name, info in dirs.items():
+        for fname in info.get("files", []):
+            out.add((shard_name, fname))
+    return out
+
+def load_santa_split(cache, split_path: Path | None = None, which: str = "TRAIN",
+                      limit: int | None = None) -> list[Triplet]:
+    """Load only SANTA events whose (shard, source_file) is kept by the
+    realism-filtered split (splits/v2_filtered_split.json, design spec §3).
+
+    The cache holds only XML-1..XML-6 (no long_content shards); split
+    entries for long_content shards simply never match and are skipped.
+
+    Round-robins across the kept shards (one triplet per shard per round)
+    rather than draining `cache.shards` in dict-insertion order, so a
+    `limit` below the full kept-event count still spans every shard the
+    split keeps for this arm (e.g. XML-2, XML-4, XML-6 for TRAIN) instead of
+    collapsing to whichever shard happens to iterate first.
+    """
+    if split_path is None:
+        split_path = SANTA_SPLIT
+    with Path(split_path).open() as f:
+        split_dict = json.load(f)
+    keep = split_file_set(split_dict, which)
+    keep_shards = {s for s, _ in keep}
+
+    def _shard_events(shard_name, shard):
+        for ev in range(len(shard)):
+            t = shard.get_triplet(ev)
+            if (shard_name, t["source_file"]) not in keep:
+                continue
+            rows = np.stack([fix_length(t["R"]), fix_length(t["P1"]), fix_length(t["P2"])])
+            yield Triplet(rows=rows, recomb_idx=0, source="santa", group=shard_name)
+
+    active = [_shard_events(name, shard) for name, shard in cache.shards.items()
+              if name in keep_shards]
+    out: list[Triplet] = []
+    while active and (limit is None or len(out) < limit):
+        still_active = []
+        for gen in active:
+            try:
+                out.append(next(gen))
+            except StopIteration:
+                continue
+            still_active.append(gen)
+            if limit is not None and len(out) >= limit:
+                break
+        active = still_active
     return out

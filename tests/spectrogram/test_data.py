@@ -1,7 +1,8 @@
+import json
 import numpy as np
 from pathlib import Path
 from spectrogram import config
-from spectrogram.data import fix_length, load_lanl_triplets, Triplet
+from spectrogram.data import fix_length, load_lanl_triplets, Triplet, split_file_set
 from Bio.SeqRecord import SeqRecord
 from Bio.Seq import Seq
 from Bio import SeqIO
@@ -76,3 +77,32 @@ def test_expanded_path_group_and_recomb_idx(tmp_path):
         assert t.rows.shape == (3, config.SEQ_LEN)
         assert t.rows.dtype == np.int8
         assert t.source == "lanl"
+
+
+def test_split_file_set_excludes_dropped_shards():
+    fake = {
+        "splits": {
+            "TRAIN": {
+                "dirs": {
+                    "XML-2": {"files": ["a.fa", "b.fa"]},
+                    "XML-6": {"files": ["c.fa"]},
+                }
+            }
+        }
+    }
+    result = split_file_set(fake, "TRAIN")
+    assert result == {("XML-2", "a.fa"), ("XML-2", "b.fa"), ("XML-6", "c.fa")}
+    # A shard not listed at all (e.g. a dropped shard like "XML-1") contributes nothing.
+    assert not any(shard == "XML-1" for shard, _ in result)
+
+
+def test_split_file_set_xml6_train_val_disjoint():
+    """XML-6 is split BY FILE between TRAIN and VAL -- the same filename must
+    never appear in both arms of the real split."""
+    with config.SANTA_SPLIT.open() as f:
+        real = json.load(f)
+    train = {fname for shard, fname in split_file_set(real, "TRAIN") if shard == "XML-6"}
+    val = {fname for shard, fname in split_file_set(real, "VAL") if shard == "XML-6"}
+    assert train, "expected XML-6 files in TRAIN"
+    assert val, "expected XML-6 files in VAL"
+    assert train.isdisjoint(val)

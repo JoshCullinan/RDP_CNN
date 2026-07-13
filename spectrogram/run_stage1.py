@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 import numpy as np
 from spectrogram.config import BACKBONE
-from spectrogram.data import load_santa_triplets, load_lanl_triplets
+from spectrogram.data import load_santa_split, load_lanl_triplets
 from spectrogram.harness import IdentificationDataset
 from spectrogram.models import build_backbone, SmallCNN, in_channels_for
 from spectrogram.train import train_model, predict, accuracy
@@ -75,13 +75,12 @@ def run_bakeoff(santa, lanl, arms=("A0", "A1", "A2"),
 
 def main(epochs=15):
     write_preregistration("results_spectrogram_prereg.json")
-    santa = load_santa_triplets(_cache(), limit=20_000)
+    cache = _cache()
+    santa_train = load_santa_split(cache, which="TRAIN", limit=20_000)
+    santa_val = load_santa_split(cache, which="VAL", limit=2_000)
     lanl = load_lanl_triplets()          # prefers expanded dir if present
-    SANTA_VAL_N = 500
-    santa_val = santa[-SANTA_VAL_N:]
-    santa_train = santa[:-SANTA_VAL_N]
     power = run_power_check(lanl)
-    p2 = run_p2_gate(santa[:2000])
+    p2 = run_p2_gate(santa_train[:2000])
 
     # FIX 6 (I1): advisory gates -- warn loudly and early (before the multi-hour
     # bake-off) so the researcher can abort a leaking/underpowered run, but this

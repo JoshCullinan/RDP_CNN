@@ -16,3 +16,4 @@ NUM_WORKERS = 4
 LANL_TRIPLET_DIR = Path("data/lanl_crf/triplets")
 LANL_TRIPLET_EXPANDED_DIR = Path("data/lanl_crf/triplets_expanded")
 CACHE_IMG_DIR = Path("cache/spectrogram_v1")
+SANTA_SPLIT = Path("splits/v2_filtered_split.json")
