@@ -6,7 +6,7 @@ import torch.nn as nn
 from spectrogram.config import BACKBONE
 
 def in_channels_for(arm: str) -> int:
-    return {"A0": 3, "A1": 3, "A2": 12}[arm]
+    return {"A0": 3, "A1": 3, "A2": 12, "A3": 3, "A4": 3}[arm]
 
 def build_backbone(in_ch: int, pretrained: bool, name: str = BACKBONE, n_classes: int = 3):
     return timm.create_model(name, pretrained=pretrained, in_chans=in_ch,

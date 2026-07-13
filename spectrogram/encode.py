@@ -38,6 +38,40 @@ def pairwise_identity_multiscale(row_i: np.ndarray, row_j: np.ndarray) -> np.nda
     idx = np.linspace(0, SEQ_LEN - 1, T).astype(int)
     return np.stack([_boxcar(ident, w)[idx] for w in SCALES])  # (len(SCALES), T)
 
+# --- splice-explicit arms (Fable-5 advisor, 2026-07-13) -----------------------
+# A3/A4 encode the CROSS-sequence match structure directly (not each sequence
+# independently), so the only cheap signal is the splice, not composition.
+
+def match_track(row_i: np.ndarray, row_j: np.ndarray) -> np.ndarray:
+    """Per-position identity of two aligned rows (same convention as A0)."""
+    return (np.asarray(row_i) == np.asarray(row_j)).astype(np.float32)  # (SEQ_LEN,)
+
+def diff_spectrogram_triplet(rows: np.ndarray) -> np.ndarray:
+    """A3: STFT of each pairwise match track. A splice (recombinant switching
+    which parent it matches) makes a localized transient; composition is
+    stationary. One channel per pair -> (3, F, T)."""
+    r, p1, p2 = rows[0], rows[1], rows[2]
+    return np.stack([_stft(match_track(r, p1)),
+                     _stft(match_track(r, p2)),
+                     _stft(match_track(p1, p2))])  # (3, F, T)
+
+def dotplot_pair(row_i: np.ndarray, row_j: np.ndarray, n: int = 128) -> np.ndarray:
+    """Coarse n x n block-identity map. dot[u,v] = mean position-wise identity
+    between block u of row_i and block v of row_j. The diagonal is local
+    identity; a mosaic recombinant's r-vs-parent diagonal is bright on the block
+    it matches and dim elsewhere -> a splice is a bright-then-dim diagonal."""
+    L = (SEQ_LEN // n) * n
+    a = np.asarray(row_i)[:L].reshape(n, -1)   # (n, w)
+    b = np.asarray(row_j)[:L].reshape(n, -1)   # (n, w)
+    eq = (a[:, None, :] == b[None, :, :]).astype(np.float32)  # (n, n, w)
+    return eq.mean(axis=2)  # (n, n)
+
+def dotplot_triplet(rows: np.ndarray, n: int = 128) -> np.ndarray:
+    """A4: three pairwise dot-plots stacked -> (3, n, n)."""
+    r, p1, p2 = rows[0], rows[1], rows[2]
+    return np.stack([dotplot_pair(r, p1, n), dotplot_pair(r, p2, n),
+                     dotplot_pair(p1, p2, n)])
+
 def encode_triplet(rows: np.ndarray, arm: str) -> np.ndarray:
     r, p1, p2 = rows[0], rows[1], rows[2]
     if arm == "A1":
@@ -49,4 +83,8 @@ def encode_triplet(rows: np.ndarray, arm: str) -> np.ndarray:
         return np.stack([pairwise_identity_multiscale(r, p1),
                          pairwise_identity_multiscale(r, p2),
                          pairwise_identity_multiscale(p1, p2)])   # (3, S, T)
+    if arm == "A3":
+        return diff_spectrogram_triplet(rows)   # (3, F, T)
+    if arm == "A4":
+        return dotplot_triplet(rows)            # (3, n, n)
     raise ValueError(f"unknown arm {arm!r}")
