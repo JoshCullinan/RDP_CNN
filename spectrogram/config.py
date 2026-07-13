@@ -13,4 +13,5 @@ NT_INDICATOR_ORDER = (0, 1, 2, 3)  # A,T,G,C ints for indicator signals (gap exc
 BACKBONE = "convnext_base"
 BATCH_SIZE = 16
 LANL_TRIPLET_DIR = Path("data/lanl_crf/triplets")
+LANL_TRIPLET_EXPANDED_DIR = Path("data/lanl_crf/triplets_expanded")
 CACHE_IMG_DIR = Path("cache/spectrogram_v1")

@@ -80,3 +80,9 @@ santaSim_RDP/santa.jar
 santaSim_RDP/sarbeco.fas
 santaSim_RDP/sarbecoStart.fa
 santaSim_RDP/.vscode/
+
+# LANL parent-pairing expansion (Task 8): regenerable via
+# `python -m spectrogram.expand_lanl` (network + MAFFT). Kept out of git so
+# load_lanl_triplets()'s "prefer expanded when present" default can't
+# silently break the Task-1 4-CRF test/gate for other contributors.
+data/lanl_crf/triplets_expanded/

@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import numpy as np
-from spectrogram.config import SEQ_LEN, GAP_INT, LANL_TRIPLET_DIR
+from spectrogram.config import SEQ_LEN, GAP_INT, LANL_TRIPLET_DIR, LANL_TRIPLET_EXPANDED_DIR
 
 FASTA_NT_TO_INT = {"A": 0, "T": 1, "G": 2, "C": 3, "-": GAP_INT}
 
@@ -52,15 +52,29 @@ def _find_recomb_idx(rec_ids: list[str], crf_name: str) -> int:
     # Default: assume first record is recombinant (shouldn't reach here for valid CRFs)
     return 0
 
-def load_lanl_triplets(triplet_dir: Path = LANL_TRIPLET_DIR) -> list[Triplet]:
-    """Each CRF FASTA is 3 records; recombinant location depends on CRF source."""
+def load_lanl_triplets(triplet_dir: Path | None = None) -> list[Triplet]:
+    """Each CRF FASTA is 3 records; recombinant location depends on CRF source.
+
+    Defaults to the parent-pairing-expanded set (data/lanl_crf/triplets_expanded/,
+    built by spectrogram.expand_lanl) when it exists and is non-empty, else
+    falls back to the original 4-CRF triplets/ directory.
+    """
     from Bio import SeqIO
+    if triplet_dir is None:
+        if LANL_TRIPLET_EXPANDED_DIR.exists() and any(LANL_TRIPLET_EXPANDED_DIR.glob("*.fa")):
+            triplet_dir = LANL_TRIPLET_EXPANDED_DIR
+        else:
+            triplet_dir = LANL_TRIPLET_DIR
+
     out: list[Triplet] = []
     for fa in sorted(Path(triplet_dir).glob("*.fa")):
         recs = list(SeqIO.parse(str(fa), "fasta"))
         assert len(recs) == 3, f"{fa} has {len(recs)} records, expected 3"
 
-        crf_name = fa.stem
+        # Expanded files are named "<crf>__<pA_acc>__<pB_acc>"; the original
+        # 4 triplets are named "<crf>" directly. Either way the CRF family
+        # name is the first "__"-delimited component.
+        crf_name = fa.stem.split("__")[0]
         rec_ids = [r.id for r in recs]
         recomb_idx = _find_recomb_idx(rec_ids, crf_name)
 
