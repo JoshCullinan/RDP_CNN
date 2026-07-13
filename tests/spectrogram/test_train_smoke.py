@@ -1,4 +1,5 @@
 import numpy as np
+import torch
 from spectrogram.data import Triplet
 from spectrogram.harness import IdentificationDataset
 from spectrogram.models import SmallCNN, in_channels_for
@@ -17,9 +18,11 @@ def _mosaic_triplets(n=24, seed=0):
     return out
 
 def test_training_runs_and_learns_on_easy_signal():
+    np.random.seed(0)
+    torch.manual_seed(0)
     ds = IdentificationDataset(_mosaic_triplets(), arm="A0", rng_seed=0)
     m = SmallCNN(in_ch=in_channels_for("A0"))
-    res = train_model(m, ds, ds, epochs=3, batch_size=8, amp=False)
+    res = train_model(m, ds, ds, epochs=8, batch_size=8, amp=False)
     assert "best_val_acc" in res
     preds = predict(res["model"], ds)
     assert preds.shape == (len(ds),)
