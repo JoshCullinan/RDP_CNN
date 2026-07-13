@@ -73,11 +73,13 @@ def run_bakeoff(santa, lanl, arms=("A0", "A1", "A2"),
             }
     return results
 
-def main(epochs=15):
-    write_preregistration("results_spectrogram_prereg.json")
+def main(epochs=15, santa_limit=20_000, santa_val_limit=2_000,
+         arms=("A0", "A1", "A2"), inits=("imagenet", "random", "floor"),
+         out_prefix="results_spectrogram"):
+    write_preregistration(f"{out_prefix}_prereg.json")
     cache = _cache()
-    santa_train = load_santa_split(cache, which="TRAIN", limit=20_000)
-    santa_val = load_santa_split(cache, which="VAL", limit=2_000)
+    santa_train = load_santa_split(cache, which="TRAIN", limit=santa_limit)
+    santa_val = load_santa_split(cache, which="VAL", limit=santa_val_limit)
     lanl = load_lanl_triplets()          # prefers expanded dir if present
     power = run_power_check(lanl)
     p2 = run_p2_gate(santa_train[:2000])
@@ -99,14 +101,15 @@ def main(epochs=15):
         "power": {"mde": mde, "n_test_triplets": n_test, "underpowered": underpowered},
     }
 
-    bake = run_bakeoff(santa_train, lanl, epochs=epochs, santa_val=santa_val)
+    bake = run_bakeoff(santa_train, lanl, arms=arms, inits=inits,
+                       epochs=epochs, santa_val=santa_val)
 
     # FIX 3 (C2b): persist raw per-triplet arrays so a wrong baseline choice
     # can be re-analyzed without re-running the GPU job.
     raw = {f"{a}:{i}": {"preds": v["preds"].tolist(), "labels": v["labels"].tolist(),
                         "correct": v["correct"].tolist(), "groups": v["groups"].tolist()}
            for (a, i), v in bake.items()}
-    Path("results_spectrogram_stage1_raw.json").write_text(json.dumps(raw, indent=2))
+    Path(f"{out_prefix}_stage1_raw.json").write_text(json.dumps(raw, indent=2))
 
     decisions = {}
     for (arm, init), r in bake.items():
@@ -152,7 +155,7 @@ def main(epochs=15):
            "decisions": decisions,
            "diagnostics": diagnostics,
            "advisory_gates": advisory_gates}
-    Path("results_spectrogram_stage1.json").write_text(json.dumps(out, indent=2, default=float))
+    Path(f"{out_prefix}_stage1.json").write_text(json.dumps(out, indent=2, default=float))
     return out
 
 def _cache():
