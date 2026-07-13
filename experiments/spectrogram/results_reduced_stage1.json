@@ -1,0 +1,106 @@
+{
+  "power": {
+    "n_test_triplets": 16,
+    "mde": Infinity
+  },
+  "p2_gate": {
+    "auc": 0.6712968750000001,
+    "leak": true
+  },
+  "accs": {
+    "A0:floor": 0.5625,
+    "A0:imagenet": 0.4375,
+    "A1:floor": 0.125,
+    "A1:imagenet": 0.5,
+    "A2:floor": 0.3125,
+    "A2:imagenet": 0.125
+  },
+  "mean_fold_accs": {
+    "A0:floor": 0.5625,
+    "A0:imagenet": 0.4375,
+    "A1:floor": 0.125,
+    "A1:imagenet": 0.5,
+    "A2:floor": 0.3125,
+    "A2:imagenet": 0.125
+  },
+  "santa_val_accs": {
+    "A0:floor": 0.45675,
+    "A0:imagenet": 0.57225,
+    "A1:floor": 0.3535,
+    "A1:imagenet": 0.47325,
+    "A2:floor": 0.3445,
+    "A2:imagenet": 0.33425
+  },
+  "decisions": {
+    "A1:floor": {
+      "mean_fold_acc": 0.125,
+      "a0_mean_fold_acc": 0.5625,
+      "acc": 0.125,
+      "a0_acc": 0.5625,
+      "mcnemar_p": 0.0390625,
+      "ci": [
+        -0.625,
+        -0.25
+      ],
+      "win": false
+    },
+    "A1:imagenet": {
+      "mean_fold_acc": 0.5,
+      "a0_mean_fold_acc": 0.4375,
+      "acc": 0.5,
+      "a0_acc": 0.4375,
+      "mcnemar_p": 1.0,
+      "ci": [
+        -0.125,
+        0.25
+      ],
+      "win": false
+    },
+    "A2:floor": {
+      "mean_fold_acc": 0.3125,
+      "a0_mean_fold_acc": 0.5625,
+      "acc": 0.3125,
+      "a0_acc": 0.5625,
+      "mcnemar_p": 0.34375,
+      "ci": [
+        -0.5,
+        0.0625
+      ],
+      "win": false
+    },
+    "A2:imagenet": {
+      "mean_fold_acc": 0.125,
+      "a0_mean_fold_acc": 0.4375,
+      "acc": 0.125,
+      "a0_acc": 0.4375,
+      "mcnemar_p": 0.125,
+      "ci": [
+        -0.75,
+        0.125
+      ],
+      "win": false
+    }
+  },
+  "diagnostics": {
+    "winning_arm": "A1:imagenet",
+    "label_permutation_null_p": 0.244,
+    "divergence_corr": -0.14832567417701464,
+    "santa_heldout_gap": -0.026749999999999996,
+    "scramble_control": {
+      "scrambled_acc": 0.5625,
+      "unscrambled_acc": 0.5,
+      "delta": -0.0625
+    }
+  },
+  "advisory_gates": {
+    "p2_leak": {
+      "leak": true,
+      "auc": 0.6712968750000001
+    },
+    "power": {
+      "mde": Infinity,
+      "n_test_triplets": 16,
+      "underpowered": true
+    }
+  }
+}

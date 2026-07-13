@@ -1,0 +1,16 @@
+{
+  "primary_metric": "mean held-out-CRF top-1 identification accuracy (chance=1/3)",
+  "decision_rule": "A Fourier arm (A1/A2) beats A0 iff higher mean LOCO acc AND McNemar p<0.05 vs A0 AND cluster-bootstrap-by-CRF 95% CI on the diff excludes 0.",
+  "power_statement": "power_mde computed on the actual expanded N before modelling.",
+  "backbone": "convnext_base",
+  "arms": [
+    "A0",
+    "A1",
+    "A2"
+  ],
+  "inits": [
+    "imagenet",
+    "random",
+    "floor"
+  ]
+}
