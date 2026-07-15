@@ -52,6 +52,7 @@ from m3_dilated import (
     linear_warmup_cosine, _rss_watchdog, _rss,
 )
 from cache_v2_reader import CacheV2
+from m3_divergence_gate import pairwise_divergence
 
 GAP = 4
 NT_TO_INT = {"A": 0, "T": 1, "G": 2, "C": 3, "-": 4}
@@ -149,6 +150,10 @@ def ckpt_dict(net: WhichOf3Net, args, epoch: int, santa_val_acc, global_step: in
             "lr": args.lr, "wd": args.wd, "seed": args.seed,
             "train_shards": list(args.train_shards), "val_shards": list(args.val_shards),
             "permute_train": bool(args.permute_train),
+            "soft_aug": bool(getattr(args, "soft_aug", False)),
+            "soft_range": list(getattr(args, "soft_range", [0.85, 1.0])),
+            "soft_frac": float(getattr(args, "soft_frac", 1.0)),
+            "low_div_frac": float(getattr(args, "low_div_frac", 0.0)),
             "six_pass": True, "content_masked_pool": True,
         },
         "epoch": epoch, "santa_val_acc": santa_val_acc, "global_step": global_step,
@@ -306,6 +311,66 @@ def eval_lanl(net, triplet_dir, device, amp_dtype) -> dict:
             "details": details}
 
 
+# ---------- soft-mosaic augmentation (transfer fix) ----------
+
+def informative_sharpness(R, P1, P2):
+    """mean over INFORMATIVE positions ((P1!=P2)&(R!=gap)) of max(R==P1,R==P2).
+    Returns (sharpness, n_informative). This is the exact metric the softness
+    gap was measured on in m3_whichof3_strat.py."""
+    mask = (P1 != P2) & (R != GAP)
+    n = int(mask.sum())
+    if n == 0:
+        return float("nan"), 0
+    best = np.maximum(R == P1, R == P2)
+    return float(best[mask].mean()), n
+
+
+def soften_recomb(R, P1, P2, s_target, aug_rng):
+    """Degrade the recombinant R so its INFORMATIVE-site sharpness ~= s_target.
+
+    Softens ONLY at informative sites (P1!=P2) and ONLY downward (if R is already
+    softer than the target, returns it unchanged). A softened position is set to
+    a base that matches NEITHER parent -- the only edit that reduces a
+    max(R==P1,R==P2) metric (matching the wrong parent leaves max=1; a gap leaves
+    the informative mask). Models real recombinant drift/homoplasy (a third
+    allele). Parents are untouched; R stays the recombinant (label preserved).
+
+    Returns (R_softened_copy, achieved_inf_sharpness, n_informative).
+    """
+    R = np.asarray(R).copy()
+    mask = (P1 != P2) & (R != GAP)
+    inf_pos = np.where(mask)[0]
+    n = len(inf_pos)
+    if n == 0:
+        return R, float("nan"), 0
+    matches = np.maximum(R == P1, R == P2)[inf_pos].astype(bool)
+    matching_pos = inf_pos[matches]
+    cur_match = int(matches.sum())
+    target_match = int(round(float(s_target) * n))
+    n_flip = cur_match - target_match
+    if n_flip <= 0:
+        return R, cur_match / n, n            # already at/below target: no change
+    flip = aug_rng.choice(matching_pos, size=n_flip, replace=False)
+    for pos in flip:
+        p1b = int(P1[pos]); p2b = int(P2[pos])
+        opts = [b for b in (0, 1, 2, 3) if b != p1b and b != p2b]
+        R[int(pos)] = opts[int(aug_rng.integers(len(opts)))]
+    return R, target_match / n, n
+
+
+def sample_low_div_event(cache, train_plan, aug_rng, max_len, thr, tries=25):
+    """Oversample a low-parent-divergence SANTA triplet (rejection sampling).
+    BUILT but OFF for run 1 (--low-div-frac 0.0). Returns a loaded event dict."""
+    e = None
+    for _ in range(tries):
+        sh, ev = train_plan[int(aug_rng.integers(len(train_plan)))]
+        e = load_event(cache, sh, ev)
+        d = pairwise_divergence(e["P1"], e["P2"])
+        if not np.isnan(d) and d <= thr:
+            return e
+    return e
+
+
 # ---------- training ----------
 
 def rng_perm(rng: random.Random) -> tuple:
@@ -322,6 +387,13 @@ def train(args) -> None:
     amp_dtype = torch.bfloat16 if not args.no_bf16 else torch.float16
     print(f"[{time.strftime('%H:%M:%S')}] mode={args.mode} device={device} "
           f"amp={amp_dtype}", flush=True)
+    aug_rng = np.random.default_rng(args.seed + 777)
+    if args.soft_aug:
+        print(f"  SOFT-AUG ON (ADDITIVE): soft_frac={args.soft_frac} eligible, "
+              f"target inf-sharpness ~ U{args.soft_range}", flush=True)
+    if args.low_div_frac > 0:
+        print(f"  LOW-DIV oversampling: frac={args.low_div_frac} "
+              f"thr={args.low_div_thr}", flush=True)
 
     cache = CacheV2()
     train_plan = event_plan(cache, args.train_shards, args.n_train, rng, args.max_len)
@@ -360,11 +432,26 @@ def train(args) -> None:
         ep_loss = 0.0
         ep_correct = 0
         ep_n = 0
+        ep_aug_sharp = []
         t_ep = time.time()
         for step_in_ep, idx in enumerate(order):
-            sh, ev = train_plan[idx]
-            e = load_event(cache, sh, ev)
+            # low-divergence oversampling (OFF unless --low-div-frac>0)
+            if args.low_div_frac > 0 and aug_rng.random() < args.low_div_frac:
+                e = sample_low_div_event(cache, train_plan, aug_rng, args.max_len,
+                                         args.low_div_thr)
+            else:
+                sh, ev = train_plan[idx]
+                e = load_event(cache, sh, ev)
             rows = trunc_rows(np.stack([e["R"], e["P1"], e["P2"]]), args.max_len)
+            # soft-mosaic augmentation on the RECOMBINANT (canonical index 0),
+            # BEFORE permutation. Only R content changes -> label preserved and
+            # 6-pass exact invariance still holds.
+            if args.soft_aug and aug_rng.random() < args.soft_frac:
+                rows = rows.copy()
+                s_tgt = float(aug_rng.uniform(args.soft_range[0], args.soft_range[1]))
+                rows[0], ach, _ = soften_recomb(rows[0], rows[1], rows[2], s_tgt, aug_rng)
+                if not np.isnan(ach):
+                    ep_aug_sharp.append(ach)
             if args.permute_train:
                 perm = rng_perm(rng)
                 rows = rows[list(perm)]
@@ -403,8 +490,11 @@ def train(args) -> None:
         epoch_times.append(elapsed)
         train_loss = ep_loss / max(1, ep_n)
         train_acc = ep_correct / max(1, ep_n)
+        aug_msg = (f"  [soft-aug mean inf-sharp {float(np.mean(ep_aug_sharp)):.3f}]"
+                   if ep_aug_sharp else "")
         print(f"  epoch {ep:>2}  train_loss {train_loss:.4f}  train_acc "
-              f"{train_acc:.3f}  ({elapsed:.0f}s, {elapsed/max(1,ep_n)*1000:.0f} ms/triplet)",
+              f"{train_acc:.3f}  ({elapsed:.0f}s, {elapsed/max(1,ep_n)*1000:.0f} ms/triplet)"
+              f"{aug_msg}",
               flush=True)
         ep_rec = {"epoch": ep, "train_loss": train_loss, "train_acc": train_acc,
                   "elapsed_s": elapsed}
@@ -541,10 +631,66 @@ def check_lanl_parse(triplet_dir) -> None:
               f"(-> '{rec_ids[ridx]}')  ids={rec_ids}")
 
 
+def aug_check(args) -> None:
+    """SMOKE (no GPU/model): histogram informative-site sharpness of augmented vs
+    un-augmented training R's; confirm the which-of-3 label is preserved."""
+    cache = CacheV2()
+    plan = event_plan(cache, args.train_shards, args.n_train,
+                      random.Random(args.seed), args.max_len)
+    aug_rng = np.random.default_rng(args.seed + 777)
+    un, ag = [], []
+    par_intact = recomb_preserved = r_changed = n = 0
+    for sh, ev in plan:
+        e = load_event(cache, sh, ev)
+        rows = trunc_rows(np.stack([e["R"], e["P1"], e["P2"]]), args.max_len)
+        s0, ninf = informative_sharpness(rows[0], rows[1], rows[2])
+        if np.isnan(s0):
+            continue
+        un.append(s0)
+        rows2 = rows.copy()
+        if aug_rng.random() < args.soft_frac:
+            s_tgt = float(aug_rng.uniform(args.soft_range[0], args.soft_range[1]))
+            rows2[0], ach, _ = soften_recomb(rows2[0], rows2[1], rows2[2], s_tgt, aug_rng)
+        s1, _ = informative_sharpness(rows2[0], rows2[1], rows2[2])
+        ag.append(s1)
+        # label preservation: parents untouched; recombinant recoverable at its
+        # (permuted) index; only row 0 (R) changed.
+        par_intact += int((rows2[1] == rows[1]).all() and (rows2[2] == rows[2]).all())
+        perm = list(aug_rng.permutation(3))
+        rperm = rows2[perm]
+        lbl = perm.index(0)
+        recomb_preserved += int((rperm[lbl] == rows2[0]).all())
+        r_changed += int(not (rows2[0] == rows[0]).all())
+        n += 1
+
+    un = np.array(un); ag = np.array(ag)
+    edges = np.round(np.arange(0.80, 1.0001, 0.025), 3)
+    hu, _ = np.histogram(un, bins=edges)
+    ha, _ = np.histogram(ag, bins=edges)
+    print(f"[aug-check] n={n}  soft_frac={args.soft_frac}  soft_range={args.soft_range}")
+    print(f"  informative-site sharpness histogram  (bin -> un-aug / augmented):")
+    for i in range(len(edges) - 1):
+        bar_u = "#" * int(40 * hu[i] / max(1, hu.max()))
+        bar_a = "*" * int(40 * ha[i] / max(1, ha.max()))
+        print(f"    [{edges[i]:.3f},{edges[i+1]:.3f})  {hu[i]:>5} / {ha[i]:>5}  "
+              f"{bar_u}|{bar_a}")
+    for tag, a in (("un-aug ", un), ("augment", ag)):
+        print(f"  {tag}: min {a.min():.3f} p05 {np.quantile(a, .05):.3f} "
+              f"p25 {np.quantile(a, .25):.3f} median {np.median(a):.3f} "
+              f"max {a.max():.3f}  frac<=0.92 {float((a <= 0.92).mean()):.2f}")
+    print(f"  LABEL PRESERVATION: parents_untouched {par_intact}/{n}  "
+          f"recomb_recoverable_after_perm {recomb_preserved}/{n}  "
+          f"R_content_changed {r_changed}/{n}")
+    print(f"  ACTUAL SOFTENED FRACTION (R content changed): {r_changed}/{n} = "
+          f"{r_changed/max(1,n):.3f}")
+    print(f"  label-preservation PASS: {par_intact == n and recomb_preserved == n}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", default="smoke",
-                    choices=["smoke", "timing", "train", "eval-ckpt", "lanl-parse"])
+                    choices=["smoke", "timing", "train", "eval-ckpt", "lanl-parse",
+                             "aug-check"])
     ap.add_argument("--train-shards", nargs="+", default=["XML-1", "XML-2", "XML-3", "XML-4"])
     ap.add_argument("--val-shards", nargs="+", default=["XML-5"])
     ap.add_argument("--n-train", type=int, default=200)
@@ -566,6 +712,20 @@ def main():
     ap.add_argument("--permute-train", action="store_true",
                     help="random row permutation during training (a no-op for "
                          "invariance; light regularizer)")
+    ap.add_argument("--soft-aug", action="store_true",
+                    help="soft-mosaic augmentation: degrade the recombinant to a "
+                         "target informative-site sharpness (transfer fix)")
+    ap.add_argument("--soft-range", type=float, nargs=2, default=[0.85, 1.0],
+                    metavar=("LO", "HI"),
+                    help="per-triplet target informative-site sharpness ~ U[LO,HI]")
+    ap.add_argument("--soft-frac", type=float, default=1.0,
+                    help="probability a triplet is ELIGIBLE for softening "
+                         "(ADDITIVE: the rest stay fully natural). Use 0.30.")
+    ap.add_argument("--low-div-frac", type=float, default=0.0,
+                    help="fraction of steps oversampling low-parent-divergence "
+                         "triplets (BUILT but OFF for run 1)")
+    ap.add_argument("--low-div-thr", type=float, default=0.15,
+                    help="parent-divergence ceiling for --low-div-frac sampling")
     ap.add_argument("--eval-santa", action="store_true")
     ap.add_argument("--eval-invariance", action="store_true")
     ap.add_argument("--eval-lanl", action="store_true")
@@ -583,6 +743,9 @@ def main():
 
     if args.mode == "lanl-parse":
         check_lanl_parse(args.lanl_dir)
+        return
+    if args.mode == "aug-check":
+        aug_check(args)
         return
     if args.mode == "eval-ckpt":
         run_eval_ckpt(args)
