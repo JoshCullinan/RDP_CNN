@@ -1,0 +1,92 @@
+{
+  "task": "Phase 0 Step 0.3 -- 'none is divergence-driven' confound KPI",
+  "seed": 0,
+  "config": {
+    "arm": "A0",
+    "backbone": "resnet50",
+    "santa_limit": 200,
+    "val_limit": 120,
+    "epochs": 1
+  },
+  "n": {
+    "positives": 120,
+    "negatives": 60,
+    "pooled": 180
+  },
+  "validation_gate": {
+    "real_acc": 0.16666666666666666,
+    "false_none_rate": 0.39166666666666666,
+    "none_recall": 0.5333333333333333,
+    "reference_seed0": {
+      "real_acc": 0.441,
+      "false_none_rate": 0.419,
+      "none_recall": 0.61
+    },
+    "note": "AMP/cudnn nondeterminism -> approximate, not exact, vs exp8 seed-0."
+  },
+  "correlations": {
+    "none_logit_vs_divergence": {
+      "negatives": {
+        "pearson_r": 0.5042912836648281,
+        "pearson_p": 3.987554145529614e-05,
+        "spearman_r": 0.5150946804426025,
+        "spearman_p": 2.5414686760525012e-05,
+        "n": 60
+      },
+      "positives": {
+        "pearson_r": 0.27524019207434236,
+        "pearson_p": 0.0023459147756565734,
+        "spearman_r": 0.2381016046684769,
+        "spearman_p": 0.00882533462234358,
+        "n": 120
+      },
+      "pooled": {
+        "pearson_r": 0.277786282904353,
+        "pearson_p": 0.0001596807800516197,
+        "spearman_r": 0.25008462292706446,
+        "spearman_p": 0.0007096430429526546,
+        "n": 180
+      }
+    },
+    "none_prob_vs_divergence": {
+      "negatives": {
+        "pearson_r": 0.561015782774099,
+        "pearson_p": 3.1234655322326996e-06,
+        "spearman_r": 0.5182344851081552,
+        "spearman_p": 2.2231898455000357e-05,
+        "n": 60
+      },
+      "positives": {
+        "pearson_r": 0.26255535468646923,
+        "pearson_p": 0.0037668838142253295,
+        "spearman_r": 0.26140962862400613,
+        "spearman_p": 0.003927216968169977,
+        "n": 120
+      },
+      "pooled": {
+        "pearson_r": 0.2773381484147176,
+        "pearson_p": 0.00016379245528709528,
+        "spearman_r": 0.27820617949658066,
+        "spearman_p": 0.00015591577099668185,
+        "n": 180
+      }
+    }
+  },
+  "divergence_gap": {
+    "false_none_vs_correct_negatives": 0.061054543439716336,
+    "mean_div_false_none_errors": 0.26110141843971635,
+    "n_false_none_errors": 47,
+    "mean_div_correct_negatives": 0.200046875,
+    "n_correct_negatives": 32,
+    "within_negatives_none_minus_recomb": 0.07209806547619049,
+    "within_positives_none_minus_recomb": 0.08580233168172546
+  },
+  "headline_kpi": {
+    "set": "negatives",
+    "none_logit_pearson_r": 0.5042912836648281,
+    "none_logit_spearman_r": 0.5150946804426025,
+    "none_prob_pearson_r": 0.561015782774099,
+    "none_prob_spearman_r": 0.5182344851081552
+  },
+  "notes": "exp8's false_none_rate (=0.407 mean / 0.419 seed-0) measures real RECOMBINANTS (positives) wrongly called 'none' -- NOT non-recombinant negatives, despite the step brief's phrasing. none_recall (0.610 seed-0) is the negatives->none rate."
+}
