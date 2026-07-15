@@ -1,0 +1,33 @@
+{
+  "arm": "A0",
+  "config": {
+    "santa_limit": 3000,
+    "epochs": 8,
+    "seeds": [
+      0,
+      1
+    ],
+    "none_frac": 0.5,
+    "chance_4way": 0.25
+  },
+  "mean": {
+    "overall": 0.6093333333333333,
+    "none_recall": 0.999,
+    "real_acc": 0.4145,
+    "false_none_rate": 0.0
+  },
+  "runs": [
+    {
+      "overall": 0.6346666666666667,
+      "none_recall": 0.998,
+      "real_acc": 0.453,
+      "false_none_rate": 0.0
+    },
+    {
+      "overall": 0.584,
+      "none_recall": 1.0,
+      "real_acc": 0.376,
+      "false_none_rate": 0.0
+    }
+  ]
+}

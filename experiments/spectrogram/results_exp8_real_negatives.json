@@ -1,0 +1,30 @@
+{
+  "arm": "A0",
+  "backbone": "resnet50",
+  "negatives": "REAL non-recombinant triplets",
+  "config": {
+    "santa_limit": 6000,
+    "epochs": 15,
+    "seeds": [
+      0,
+      1
+    ]
+  },
+  "mean": {
+    "real_acc": 0.436,
+    "false_none_rate": 0.40700000000000003,
+    "none_recall": 0.629
+  },
+  "runs": [
+    {
+      "real_acc": 0.441,
+      "false_none_rate": 0.419,
+      "none_recall": 0.648
+    },
+    {
+      "real_acc": 0.431,
+      "false_none_rate": 0.395,
+      "none_recall": 0.61
+    }
+  ]
+}

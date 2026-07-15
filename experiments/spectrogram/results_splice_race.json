@@ -1,0 +1,92 @@
+{
+  "config": {
+    "santa_limit": 2000,
+    "val_limit": 800,
+    "epochs": 8,
+    "seeds": [
+      0,
+      1
+    ],
+    "chance": 0.3333333333333333,
+    "backbone": "SmallCNN"
+  },
+  "summary": {
+    "A0": {
+      "val_mean": 0.4275,
+      "val_std": 0.028749999999999998,
+      "scr_mean": 0.43625,
+      "scr_std": 0.007499999999999979,
+      "splice_drop": -0.008750000000000036,
+      "val": [
+        0.45625,
+        0.39875
+      ],
+      "scrambled": [
+        0.44375,
+        0.42875
+      ]
+    },
+    "A1": {
+      "val_mean": 0.320625,
+      "val_std": 0.003124999999999989,
+      "scr_mean": 0.325,
+      "scr_std": 0.010000000000000009,
+      "splice_drop": -0.004375000000000018,
+      "val": [
+        0.3175,
+        0.32375
+      ],
+      "scrambled": [
+        0.315,
+        0.335
+      ]
+    },
+    "A3": {
+      "val_mean": 0.3375,
+      "val_std": 0.0062500000000000056,
+      "scr_mean": 0.326875,
+      "scr_std": 0.016875,
+      "splice_drop": 0.010624999999999996,
+      "val": [
+        0.33125,
+        0.34375
+      ],
+      "scrambled": [
+        0.34375,
+        0.31
+      ]
+    },
+    "A4": {
+      "val_mean": 0.3725,
+      "val_std": 0.006249999999999978,
+      "scr_mean": 0.303125,
+      "scr_std": 0.005625000000000019,
+      "splice_drop": 0.06937500000000002,
+      "val": [
+        0.36625,
+        0.37875
+      ],
+      "scrambled": [
+        0.30875,
+        0.2975
+      ]
+    }
+  },
+  "verdict_vs_A0": {
+    "A1": {
+      "beats_A0_on_val": false,
+      "collapses_on_scramble": false,
+      "keep": false
+    },
+    "A3": {
+      "beats_A0_on_val": false,
+      "collapses_on_scramble": false,
+      "keep": false
+    },
+    "A4": {
+      "beats_A0_on_val": false,
+      "collapses_on_scramble": false,
+      "keep": false
+    }
+  }
+}
